@@ -1,9 +1,20 @@
-console.log('🔧 HEXGATE V3 - Démarrage...');
-console.log('📦 Version: @whiskeysockets/baileys');
+console.log('🔧 HEXGATE V3 - Vérification des dépendances...');
+console.log('📦 Version correcte: @whiskeysockets/baileys');
 
-// ==================== CONFIGURATION ====================
-const fs = require('fs');
-const path = require('path');
+const requiredModules = [
+  '@whiskeysockets/baileys',
+  'pino',
+  'fs',
+  'path',
+  'child_process',
+  'readline',
+  'buffer',
+  'express',
+  'cors',
+  'body-parser'
+];
+
+const missingModules = [];
 
 // 📁 CHARGEMENT DE LA CONFIGURATION
 let config = {};
@@ -22,7 +33,10 @@ try {
       alwaysOnline: true,
       logLevel: "silent",
       telegramLink: "https://t.me/hextechcar",
-      botImageUrl: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTyERDdGHGjmXPv_6tCBIChmD-svWkJatQlpzfxY5WqFg&s=10"
+      botImageUrl: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTyERDdGHGjmXPv_6tCBIChmD-svWkJatQlpzfxY5WqFg&s=10",
+      maxSessions: 10, // Limite de sessions
+      webPort: 3000,   // Port pour l'interface web
+      pairingExpiry: 300 // 5 minutes en secondes
     };
     fs.writeFileSync('./config.json', JSON.stringify(config, null, 2));
     console.log('✅ config.json créé avec valeurs par défaut');
@@ -32,19 +46,23 @@ try {
   config = {
     prefix: ".",
     ownerNumber: "243816107573",
-    botPublic: true,
+    botPublic: false,
     fakeRecording: false,
     antiLink: true,
     alwaysOnline: true,
     logLevel: "silent",
     telegramLink: "https://t.me/hextechcar",
-    botImageUrl: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTyERDdGHGjmXPv_6tCBIChmD-svWkJatQlpzfxY5WqFg&s=10"
+    botImageUrl: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTyERDdGHGjmXPv_6tCBIChmD-svWkJatQlpzfxY5WqFg&s=10",
+    maxSessions: 10,
+    webPort: 3000,
+    pairingExpiry: 300
   };
 }
 
-// Variables globales depuis config.json
+// Variables globales
 const prefix = config.prefix || ".";
 let botPublic = config.botPublic || true;
+let welcomeEnabled = false;
 let fakeRecording = config.fakeRecording || false;
 const antiLink = config.antiLink || true;
 const alwaysOnline = config.alwaysOnline || true;
@@ -52,14 +70,125 @@ const OWNER_NUMBER = `${config.ownerNumber.replace(/\D/g, '')}@s.whatsapp.net`;
 const telegramLink = config.telegramLink || "https://t.me/hextechcar";
 const botImageUrl = config.botImageUrl || "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTyERDdGHGjmXPv_6tCBIChmD-svWkJatQlpzfxY5WqFg&s=10";
 const logLevel = config.logLevel || "silent";
+const MAX_SESSIONS = config.maxSessions || 10;
+const PAIRING_EXPIRY = config.pairingExpiry || 300; // 5 minutes en secondes
 
-console.log('📋 Configuration chargée:');
-console.log(`  • Prefix: ${prefix}`);
-console.log(`  • Owner: ${OWNER_NUMBER}`);
-console.log(`  • Mode: ${botPublic ? 'Public' : 'Privé'}`);
-console.log(`  • Fake Recording: ${fakeRecording ? 'Activé' : 'Désactivé'}`);
+// Vérifier chaque module
+for (const module of requiredModules) {
+  try {
+    if (['fs', 'path', 'child_process', 'readline', 'buffer'].includes(module)) {
+      require(module);
+      console.log(`✅ ${module} - PRÉSENT (Node.js)`);
+    } else if (['express', 'cors', 'body-parser'].includes(module)) {
+      try {
+        require.resolve(module);
+        console.log(`✅ ${module} - PRÉSENT`);
+      } catch {
+        missingModules.push(module);
+        console.log(`❌ ${module} - MANQUANT`);
+      }
+    } else {
+      require.resolve(module);
+      console.log(`✅ ${module} - PRÉSENT`);
+    }
+  } catch (error) {
+    if (!['fs', 'path', 'child_process', 'readline', 'buffer'].includes(module)) {
+      missingModules.push(module);
+      console.log(`❌ ${module} - MANQUANT`);
+    }
+  }
+}
 
-// ==================== IMPORTS ====================
+// Installation automatique si modules manquants
+if (missingModules.length > 0) {
+  console.log('\n📥 Installation automatique des modules manquants...');
+  
+  try {
+    const { execSync } = require('child_process');
+    const fs = require('fs');
+    const path = require('path');
+    
+    const modulesToInstall = {
+      '@whiskeysockets/baileys': '^6.5.0',
+      'pino': '^8.19.0',
+      'express': '^4.18.2',
+      'cors': '^2.8.5',
+      'body-parser': '^1.20.2'
+    };
+    
+    console.log('📄 Création/MAJ package.json...');
+    
+    let packageJson = {
+      name: 'hexgate-bot',
+      version: '5.2.0',
+      description: 'HEXGATE WhatsApp Bot',
+      main: 'index.js',
+      scripts: {
+        start: 'node index.js',
+        install: 'echo "Installation des dépendances..."'
+      },
+      dependencies: {}
+    };
+    
+    if (fs.existsSync('package.json')) {
+      try {
+        const existing = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+        packageJson = { ...packageJson, ...existing };
+      } catch (e) {
+        console.log('⚠️ package.json existant invalide, création nouveau');
+      }
+    }
+    
+    Object.keys(modulesToInstall).forEach(mod => {
+      packageJson.dependencies[mod] = modulesToInstall[mod];
+    });
+    
+    fs.writeFileSync('package.json', JSON.stringify(packageJson, null, 2));
+    
+    console.log('🚀 Installation via npm...');
+    
+    for (const module of missingModules) {
+      if (modulesToInstall[module]) {
+        console.log(`📦 Installation de ${module}@${modulesToInstall[module]}...`);
+        try {
+          execSync(`npm install ${module}@${modulesToInstall[module]} --save`, { 
+            stdio: 'inherit',
+            cwd: process.cwd()
+          });
+        } catch (installError) {
+          console.log(`⚠️ Tentative alternative pour ${module}...`);
+          try {
+            execSync(`npm install ${module} --save`, { 
+              stdio: 'pipe',
+              cwd: process.cwd() 
+            });
+          } catch (e) {
+            console.log(`❌ Échec installation ${module}: ${e.message}`);
+          }
+        }
+      }
+    }
+    
+    console.log('\n✅ Installation terminée !');
+    console.log('🔄 Redémarrage dans 3 secondes...');
+    
+    setTimeout(() => {
+      console.clear();
+      console.log('🚀 REDÉMARRAGE DU BOT HEXGATE...\n');
+      require('./index.js');
+    }, 3000);
+    
+    return;
+    
+  } catch (error) {
+    console.log('❌ Erreur installation automatique:', error.message);
+    console.log('\n🛠️ INSTALLEZ MANUELLEMENT:');
+    console.log('npm install @whiskeysockets/baileys@^6.5.0 pino@^8.19.0 express@^4.18.2 cors@^2.8.5 body-parser@^1.20.2');
+    process.exit(1);
+  }
+}
+
+// Import des modules
 const {
   default: makeWASocket,
   useMultiFileAuthState,
@@ -67,275 +196,126 @@ const {
   DisconnectReason,
   fetchLatestBaileysVersion,
   Browsers,
-  delay
+  delay,
+  getContentType
 } = require("@whiskeysockets/baileys");
 
 const P = require("pino");
+const fs = require("fs");
+const path = require("path");
 const readline = require("readline");
+const { exec } = require("child_process");
+const { Buffer } = require("buffer");
 
-// 📡 API WEB SERVER
+// Import Express pour l'API web
 const express = require('express');
 const cors = require('cors');
-
-// ==================== VARIABLES GLOBALES ====================
-let sock = null;
-let botReady = false;
-let pairingCodes = new Map();
-let processingMessages = new Set();
-let messageStore = new Map();
-let viewOnceStore = new Map();
-let antiLinkCooldown = new Map();
-let antiLinkWarnings = new Map();
-let botMessages = new Set();
-let autoReact = true;
+const bodyParser = require('body-parser');
 
 // 🌈 COULEURS POUR LE TERMINAL
 const colors = {
   reset: '\x1b[0m',
+  bright: '\x1b[1m',
+  dim: '\x1b[2m',
   red: '\x1b[31m',
   green: '\x1b[32m',
   yellow: '\x1b[33m',
   blue: '\x1b[34m',
   magenta: '\x1b[35m',
-  cyan: '\x1b[36m'
+  cyan: '\x1b[36m',
+  white: '\x1b[37m'
 };
 
 // 📁 Dossiers
+const VV_FOLDER = "./.VV";
 const DELETED_MESSAGES_FOLDER = "./deleted_messages";
+const COMMANDS_FOLDER = "./commands";
 const VIEW_ONCE_FOLDER = "./viewOnce";
 const DELETED_IMAGES_FOLDER = "./deleted_images";
+const WEB_FOLDER = "./web";
 
 // Vérification des dossiers
-[DELETED_MESSAGES_FOLDER, VIEW_ONCE_FOLDER, DELETED_IMAGES_FOLDER].forEach(folder => {
+[VV_FOLDER, DELETED_MESSAGES_FOLDER, COMMANDS_FOLDER, VIEW_ONCE_FOLDER, DELETED_IMAGES_FOLDER, WEB_FOLDER].forEach(folder => {
   if (!fs.existsSync(folder)) {
     fs.mkdirSync(folder, { recursive: true });
     console.log(`${colors.green}✅ Dossier ${folder} créé${colors.reset}`);
-  }
+  } else {
+    console.log(`${colors.cyan}📁 Dossier ${folder} déjà existant${colors.reset}`);
+  });
 });
 
-// ==================== FONCTIONS API ====================
-function isBotReady() {
-  return botReady && sock !== null;
-}
+// Variables globales pour l'API
+let sock = null;
+let botReady = false;
+let pairingCodes = new Map();
+let activeSessions = new Map();
 
-async function generatePairCode(phone) {
-  try {
-    if (!sock) {
-      console.log('❌ Bot non initialisé');
-      return null;
-    }
-    
-    const cleanPhone = phone.replace(/\D/g, '');
-    const phoneWithCountry = cleanPhone.startsWith('243') ? cleanPhone : `243${cleanPhone}`;
-    
-    console.log(`📱 Génération pair code pour: ${phoneWithCountry}`);
-    
-    const code = await sock.requestPairingCode(phoneWithCountry);
-    
-    if (code) {
-      pairingCodes.set(phoneWithCountry, {
-        code: code,
-        timestamp: Date.now()
-      });
-      
-      setTimeout(() => {
-        pairingCodes.delete(phoneWithCountry);
-      }, 300000);
-      
-      console.log(`✅ Pair code généré: ${code}`);
-      return code;
-    }
-    
-    return null;
-  } catch (error) {
-    console.log(`❌ Erreur génération pair code: ${error.message}`);
-    return null;
-  }
-}
-
-// ==================== SERVEUR WEB EXPRESS ====================
-function startWebServer(port = process.env.PORT || 3000) {
-  const app = express();
-  
-  app.use(cors());
-  app.use(express.json());
-  app.use(express.static('website'));
-  
-  // Route pour le site web
-  app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, 'website', 'index.html'));
-  });
-  
-  // Route pour générer un code pair
-  app.post('/api/generate-pair-code', async (req, res) => {
-    try {
-      const { phone } = req.body;
-      
-      if (!phone) {
-        return res.status(400).json({ error: 'Numéro requis' });
-      }
-      
-      console.log(`🌐 Demande de code pair pour: ${phone}`);
-      
-      const code = await generatePairCode(phone);
-      
-      if (code) {
-        res.json({ 
-          success: true, 
-          code: code,
-          message: 'Code généré avec succès'
-        });
-      } else {
-        res.status(500).json({ 
-          error: 'Impossible de générer le code' 
-        });
-      }
-    } catch (error) {
-      console.error('Erreur API:', error);
-      res.status(500).json({ error: error.message });
-    }
-  });
-  
-  // Route pour vérifier l'état du bot
-  app.get('/api/bot-status', (req, res) => {
-    res.json({ 
-      ready: isBotReady(),
-      status: isBotReady() ? 'Bot en ligne' : 'Bot non connecté',
-      version: 'HEX✦GATE V2'
-    });
-  });
-  
-  // Route pour obtenir les statistiques
-  app.get('/api/stats', (req, res) => {
-    res.json({
-      ready: isBotReady(),
-      pairingCodesGenerated: pairingCodes.size,
-      uptime: process.uptime(),
-      version: 'HEX✦GATE V2'
-    });
-  });
-  
-  // Health check pour Render
-  app.get('/health', (req, res) => {
-    res.json({ status: 'ok', timestamp: new Date().toISOString() });
-  });
-  
-  return app.listen(port, () => {
-    console.log(`${colors.green}🌐 Serveur web démarré sur le port ${port}${colors.reset}`);
-    console.log(`${colors.cyan}📱 Accédez au site: http://localhost:${port}${colors.reset}`);
-  });
-}
-
-// ==================== FONCTIONS UTILITAIRES ====================
-function isOwner(senderJid) {
-  const normalizedJid = senderJid.split(":")[0];
-  const ownerJid = OWNER_NUMBER.split(":")[0];
-  return normalizedJid === ownerJid;
-}
-
-async function isAdminInGroup(sock, jid, senderJid) {
-  try {
-    if (!jid.endsWith("@g.us")) return false;
-    
-    const metadata = await sock.groupMetadata(jid);
-    const participant = metadata.participants.find(p => p.id === senderJid);
-    
-    if (!participant) return false;
-    
-    return participant.admin === "admin" || participant.admin === "superadmin";
-  } catch (error) {
-    console.log(`${colors.yellow}⚠️ Erreur vérification admin: ${error.message}${colors.reset}`);
-    return false;
-  }
-}
-
-async function sendFormattedMessage(sock, jid, messageText) {
-  const formattedMessage = `┏━━❖ ＡＲＣＡＮＥ❖━━┓
-┃ 🛡️ 𝐇𝐄𝐗✦𝐆Ａ𝐓Ｅ 𝑽_1
-┃
-┃ ${messageText}
-┗━━━━━━━━━━━━━━━┛`;
-
-  try {
-    const sentMsg = await sock.sendMessage(jid, { 
-      text: formattedMessage 
-    });
-    
-    if (sentMsg?.key?.id) {
-      botMessages.add(sentMsg.key.id);
-      setTimeout(() => botMessages.delete(sentMsg.key.id), 300000);
-    }
-  } catch (error) {
-    console.log(`${colors.red}❌ Échec envoi message: ${error.message}${colors.reset}`);
-  }
-}
-
-// ==================== CLASS COMMAND HANDLER ====================
+// ============================================
+// 📦 SYSTÈME DE COMMANDES SIMPLIFIÉ
+// ============================================
 class CommandHandler {
   constructor() {
     this.commands = new Map();
+    this.commandsLoaded = false;
     this.initializeCommands();
   }
 
   initializeCommands() {
-    console.log(`${colors.cyan}📁 Initialisation des commandes...${colors.reset}`);
-    
-    // Commandes simplifiées
-    this.commands.set("ping", {
-      name: "ping",
-      description: "Test du bot",
-      execute: async (sock, msg) => {
-        const from = msg.key.remoteJid;
-        await sock.sendMessage(from, { text: "🏓 PONG! Bot en ligne." });
-      }
-    });
-
-    this.commands.set("menu", {
-      name: "menu",
-      description: "Affiche le menu",
-      execute: async (sock, msg) => {
-        const from = msg.key.remoteJid;
-        const menuText = `┏━━❖ ＡＲＣＡＮＥ ❖━━┓
-┃ 🛡️ HEX✦GATE V2
-┃ 👨‍💻 Dev : T.me/hextechcar
-┃ 
-┗━━━━━━━━━━━━━━━━
-
-Commandes disponibles:
-• .ping - Test du bot
-• .menu - Ce menu
-• .status - Statut du bot
-• .pair - Générez un code pairing
-
-🔗 Telegram: ${telegramLink}`;
-
-        await sock.sendMessage(from, { text: menuText });
-      }
-    });
-
-    this.commands.set("status", {
-      name: "status",
-      description: "Statut du bot",
-      execute: async (sock, msg) => {
-        const from = msg.key.remoteJid;
-        const statusText = `📊 *STATUS DU BOT*
-        
-🤖 Nom: HEX✦GATE V2
-✅ Statut: ${botReady ? 'En ligne' : 'Hors ligne'}
-🔓 Mode: ${botPublic ? 'Public' : 'Privé'}
-📱 Propriétaire: ${config.ownerNumber}
-🔗 Telegram: ${telegramLink}
-
-${botReady ? '🚀 Bot prêt à utiliser !' : '⏳ Bot en cours de connexion...'}`;
-
-        await sock.sendMessage(from, { text: statusText });
-      }
-    });
-
-    console.log(`${colors.green}✅ ${this.commands.size} commandes chargées${colors.reset}`);
+    try {
+      console.log(`${colors.cyan}📁 Initialisation des commandes...${colors.reset}`);
+      
+      // Charger les commandes du dossier
+      this.loadCommandsFromDirectory();
+      
+      this.commandsLoaded = true;
+      console.log(`${colors.green}✅ ${this.commands.size} commandes chargées avec succès${colors.reset}`);
+      
+    } catch (error) {
+      this.commandsLoaded = false;
+      console.log(`${colors.red}❌ Erreur chargement commandes: ${error.message}${colors.reset}`);
+    }
   }
 
-  async execute(commandName, sock, msg, args) {
+  loadCommandsFromDirectory() {
+    try {
+      const commandsDir = path.join(__dirname, 'commands');
+      
+      if (!fs.existsSync(commandsDir)) {
+        console.log(`${colors.yellow}⚠️ Dossier commands non trouvé${colors.reset}`);
+        return;
+      }
+      
+      const commandFiles = fs.readdirSync(commandsDir).filter(file => file.endsWith('.js'));
+      
+      for (const file of commandFiles) {
+        try {
+          const commandPath = path.join(commandsDir, file);
+          delete require.cache[require.resolve(commandPath)];
+          
+          const command = require(commandPath);
+          
+          if (command && command.name && typeof command.execute === 'function') {
+            const commandName = command.name.toLowerCase();
+            
+            // Filtrer les commandes non désirées
+            if (['quiz', 'ascii', 'hack', 'ping'].includes(commandName)) {
+              console.log(`${colors.yellow}⚠️ Commande filtrée ignorée: ${commandName}${colors.reset}`);
+              continue;
+            }
+            
+            this.commands.set(commandName, command);
+            console.log(`${colors.green}✅ Commande chargée: ${colors.cyan}${command.name}${colors.reset}`);
+          }
+        } catch (error) {
+          console.log(`${colors.yellow}⚠️ Erreur chargement ${file}: ${error.message}${colors.reset}`);
+        }
+      }
+    } catch (error) {
+      console.log(`${colors.red}❌ Erreur scan dossier commands: ${error.message}${colors.reset}`);
+    }
+  }
+
+  async execute(commandName, sock, msg, args, context) {
     const cmd = commandName.toLowerCase();
     
     if (!this.commands.has(cmd)) {
@@ -346,46 +326,215 @@ ${botReady ? '🚀 Bot prêt à utiliser !' : '⏳ Bot en cours de connexion...'
     const command = this.commands.get(cmd);
     
     try {
-      console.log(`${colors.cyan}⚡ Exécution: ${cmd}${colors.reset}`);
-      await command.execute(sock, msg, args);
+      console.log(`${colors.cyan}⚡ Exécution: ${cmd} par ${context?.sender || 'Inconnu'}${colors.reset}`);
+      await command.execute(sock, msg, args, context);
+      console.log(`${colors.green}✅ Commande exécutée avec succès: ${cmd}${colors.reset}`);
       return true;
     } catch (error) {
       console.log(`${colors.red}❌ Erreur exécution ${cmd}: ${error.message}${colors.reset}`);
       return false;
     }
   }
+
+  getCommandList() {
+    return Array.from(this.commands.keys());
+  }
 }
 
-// ==================== FONCTION PRINCIPALE DU BOT ====================
+// ============================================
+// 🌐 API WEB POUR PAIRING
+// ============================================
+function setupWebAPI() {
+  const app = express();
+  app.use(cors());
+  app.use(bodyParser.json());
+  
+  // Servir les fichiers statiques du dossier web
+  app.use(express.static(path.join(__dirname, 'web')));
+  
+  // Route pour vérifier le statut du bot
+  app.get('/api/bot-status', (req, res) => {
+    res.json({
+      ready: botReady,
+      activeSessions: activeSessions.size,
+      maxSessions: MAX_SESSIONS,
+      botName: sock?.user?.name || 'HEX✦GATE',
+      version: 'V2'
+    });
+  });
+  
+  // Route pour générer un code pair
+  app.post('/api/generate-pair-code', async (req, res) => {
+    try {
+      const { phone } = req.body;
+      
+      if (!phone) {
+        return res.status(400).json({ 
+          success: false, 
+          error: 'Numéro de téléphone requis' 
+        });
+      }
+      
+      // Vérifier le format du numéro
+      const cleanPhone = phone.replace(/\D/g, '');
+      if (cleanPhone.length < 9) {
+        return res.status(400).json({ 
+          success: false, 
+          error: 'Numéro de téléphone invalide' 
+        });
+      }
+      
+      // Vérifier la limite de sessions
+      if (activeSessions.size >= MAX_SESSIONS) {
+        return res.status(429).json({ 
+          success: false, 
+          error: `Limite de ${MAX_SESSIONS} sessions atteinte` 
+        });
+      }
+      
+      // Vérifier si une session existe déjà pour ce numéro
+      if (activeSessions.has(cleanPhone)) {
+        const session = activeSessions.get(cleanPhone);
+        if (session.expiry > Date.now()) {
+          return res.json({ 
+            success: true, 
+            code: session.code,
+            expiresIn: Math.floor((session.expiry - Date.now()) / 1000)
+          });
+        } else {
+          activeSessions.delete(cleanPhone);
+        }
+      }
+      
+      // Générer le code pair
+      if (!sock || !botReady) {
+        return res.status(503).json({ 
+          success: false, 
+          error: 'Bot non connecté' 
+        });
+      }
+      
+      const code = await sock.requestPairingCode(cleanPhone);
+      
+      if (!code) {
+        return res.status(500).json({ 
+          success: false, 
+          error: 'Échec de génération du code' 
+        });
+      }
+      
+      // Enregistrer la session
+      const session = {
+        code: code,
+        phone: cleanPhone,
+        timestamp: Date.now(),
+        expiry: Date.now() + (PAIRING_EXPIRY * 1000)
+      };
+      
+      activeSessions.set(cleanPhone, session);
+      pairingCodes.set(cleanPhone, code);
+      
+      // Nettoyer après expiration
+      setTimeout(() => {
+        activeSessions.delete(cleanPhone);
+        pairingCodes.delete(cleanPhone);
+        console.log(`${colors.yellow}🗑️ Session expirée pour ${cleanPhone}${colors.reset}`);
+      }, PAIRING_EXPIRY * 1000);
+      
+      console.log(`${colors.green}✅ Code pair généré: ${code} pour ${cleanPhone}${colors.reset}`);
+      
+      res.json({
+        success: true,
+        code: code,
+        expiresIn: PAIRING_EXPIRY
+      });
+      
+    } catch (error) {
+      console.log(`${colors.red}❌ Erreur API generate-pair-code: ${error.message}${colors.reset}`);
+      res.status(500).json({ 
+        success: false, 
+        error: error.message 
+      });
+    }
+  });
+  
+  // Route pour lister les sessions actives (admin seulement)
+  app.get('/api/sessions', (req, res) => {
+    const sessions = Array.from(activeSessions.entries()).map(([phone, session]) => ({
+      phone: phone,
+      code: session.code,
+      timestamp: new Date(session.timestamp).toLocaleString(),
+      expiresIn: Math.floor((session.expiry - Date.now()) / 1000)
+    }));
+    
+    res.json({
+      total: activeSessions.size,
+      max: MAX_SESSIONS,
+      sessions: sessions
+    });
+  });
+  
+  // Route pour supprimer une session (admin seulement)
+  app.delete('/api/sessions/:phone', (req, res) => {
+    const { phone } = req.params;
+    const cleanPhone = phone.replace(/\D/g, '');
+    
+    if (activeSessions.has(cleanPhone)) {
+      activeSessions.delete(cleanPhone);
+      pairingCodes.delete(cleanPhone);
+      res.json({ success: true, message: `Session ${cleanPhone} supprimée` });
+    } else {
+      res.status(404).json({ success: false, error: 'Session non trouvée' });
+    }
+  });
+  
+  // Route par défaut pour servir index.html
+  app.get('*', (req, res) => {
+    res.sendFile(path.join(__dirname, 'web', 'index.html'));
+  });
+  
+  // Démarrer le serveur
+  const PORT = config.webPort || 3000;
+  app.listen(PORT, () => {
+    console.log(`${colors.green}🌐 Interface web démarrée sur http://localhost:${PORT}${colors.reset}`);
+  });
+  
+  return app;
+}
+
+// ============================================
+// 📱 FONCTION POUR ENVOYER DES MESSAGES FORMATÉS
+// ============================================
+async function sendFormattedMessage(sock, jid, messageText) {
+  const formattedMessage = `┏━━❖ ＡＲＣＡＮＥ❖━━┓
+┃ 🛡️ 𝐇𝐄𝐗✦𝐆Ａ𝐓Ｅ 𝑽_2
+┃
+┃ ${messageText}
+┗━━━━━━━━━━━━━━━┛
+
+┏━━【𝚃𝙴𝙻𝙴𝙶𝚁𝙰𝙼 】━━┓
+┃
+┃ ${telegramLink}
+┃
+┗━━━━━━━━━━━━━━━┛`;
+
+  try {
+    await sock.sendMessage(jid, { text: formattedMessage });
+  } catch (error) {
+    console.log(`${colors.red}❌ Erreur envoi message: ${error.message}${colors.reset}`);
+  }
+}
+
+// ============================================
+// ⚡ FONCTION PRINCIPALE DU BOT
+// ============================================
 async function startBot() {
   const rl = readline.createInterface({
     input: process.stdin,
     output: process.stdout
   });
 
-  async function askForPhoneNumber() {
-    return new Promise((resolve) => {
-      rl.question(`${colors.cyan}📱 Entrez votre numéro WhatsApp (format: 243XXXXXXXXX): ${colors.reset}`, (phone) => {
-        resolve(phone.trim());
-      });
-    });
-  }
-
   try {
-    console.log(`
-${colors.magenta}╔══════════════════════════════════════════════════╗
-║         WHATSAPP BOT - HEXGATE EDITION          ║
-╠══════════════════════════════════════════════════╣
-║ ✅ API WEB INTÉGRÉE POUR PAIRING                 ║
-║ ✅ SITE WEB INCLUS                               ║
-║ ✅ OPTIMISÉ POUR RENDER                         ║
-╚══════════════════════════════════════════════════╝${colors.reset}
-`);
-    
-    // Démarrer le serveur web
-    startWebServer();
-    
-    // Initialiser WhatsApp
     const { state, saveCreds } = await useMultiFileAuthState("auth_info_baileys");
     const { version } = await fetchLatestBaileysVersion();
     
@@ -406,34 +555,14 @@ ${colors.magenta}╔════════════════════
     sock.ev.on("connection.update", async (update) => {
       const { connection, lastDisconnect, qr } = update;
       
-      if (qr) {
-        console.log(`${colors.cyan}📱 QR Code disponible - Demande pairing par numéro${colors.reset}`);
-        
-        if (process.env.RENDER) {
-          console.log(`${colors.green}🌐 Utilisez le site web pour générer un code pairing${colors.reset}`);
-          console.log(`${colors.cyan}📱 Accédez à: https://votre-app.render.com${colors.reset}`);
-        } else {
-          const phoneNumber = await askForPhoneNumber();
-          if (!phoneNumber || phoneNumber.length < 9) {
-            console.log(`${colors.red}❌ Numéro invalide${colors.reset}`);
-            process.exit(1);
-          }
-
-          try {
-            const code = await sock.requestPairingCode(phoneNumber);
-            console.log(`${colors.green}✅ Code de pairing: ${code}${colors.reset}`);
-            console.log(`${colors.cyan}📱 Instructions: WhatsApp > ⋮ > Appareils liés > Ajouter un périphérique${colors.reset}`);
-          } catch (pairError) {
-            console.log(`${colors.red}❌ Erreur pairing: ${pairError.message}${colors.reset}`);
-          }
-        }
-      }
-      
       if (connection === "close") {
         const reason = new Error(lastDisconnect?.error)?.output?.statusCode;
         if (reason === DisconnectReason.loggedOut) {
-          console.log(`${colors.red}❌ Déconnecté, redémarrage...${colors.reset}`);
-          startBot();
+          console.log(`${colors.red}❌ Déconnecté, suppression des données d'authentification...${colors.reset}`);
+          exec("rm -rf auth_info_baileys", () => {
+            console.log(`${colors.yellow}🔄 Redémarrage du bot...${colors.reset}`);
+            startBot();
+          });
         } else {
           console.log(`${colors.yellow}🔄 Reconnexion...${colors.reset}`);
           startBot();
@@ -442,54 +571,107 @@ ${colors.magenta}╔════════════════════
         console.log(`${colors.green}✅ Connecté à WhatsApp!${colors.reset}`);
         botReady = true;
         
-        // Envoi de confirmation au propriétaire
+        // Envoyer confirmation au propriétaire
         try {
           await sock.sendMessage(OWNER_NUMBER, { 
-            text: `✅ *HEX-GATE CONNECTÉ*\n\n🚀 HEXGATE V2 est en ligne!\n🌐 API Web active\n🔗 Site pairing disponible` 
+            text: `✅ *HEX-GATE CONNECTÉ*\n\n🚀 Bot en ligne!\n📊 Commandes: ${commandHandler.getCommandList().length}\n🌐 Interface: http://localhost:${config.webPort || 3000}\n🔓 Sessions max: ${MAX_SESSIONS}`
           });
-          console.log(`${colors.green}✅ Confirmation envoyée au propriétaire${colors.reset}`);
         } catch (error) {
           console.log(`${colors.yellow}⚠️ Impossible d'envoyer message au propriétaire${colors.reset}`);
         }
+        
+        // Démarrer l'API web
+        setupWebAPI();
       }
     });
-
+    
     // 📨 TRAITEMENT DES MESSAGES
     sock.ev.on("messages.upsert", async ({ messages }) => {
       try {
         const msg = messages[0];
         if (!msg.message) return;
-
+        
         const from = msg.key.remoteJid;
-        const sender = msg.key.participant || msg.key.remoteJid;
+        const senderJid = msg.key.participant || msg.key.remoteJid;
+        const isOwnerMessage = senderJid === OWNER_NUMBER;
         
         // Récupérer le texte du message
         let body = "";
-        if (msg.message.conversation) {
+        const messageType = Object.keys(msg.message)[0];
+        
+        if (messageType === "conversation") {
           body = msg.message.conversation;
-        } else if (msg.message.extendedTextMessage?.text) {
+        } else if (messageType === "extendedTextMessage") {
           body = msg.message.extendedTextMessage.text;
-        } else if (msg.message.imageMessage?.caption) {
-          body = msg.message.imageMessage.caption;
+        } else if (messageType === "imageMessage") {
+          body = msg.message.imageMessage?.caption || "";
+        } else {
+          return;
         }
-
+        
         // Traitement des commandes
         if (body.startsWith(prefix)) {
           const args = body.slice(prefix.length).trim().split(/ +/);
           const command = args.shift().toLowerCase();
           
-          console.log(`${colors.cyan}🎯 Commande détectée: ${command} par ${sender}${colors.reset}`);
+          const context = {
+            isOwner: isOwnerMessage,
+            sender: senderJid,
+            prefix: prefix,
+            botPublic: botPublic || isOwnerMessage
+          };
           
-          if (botPublic || isOwner(sender)) {
-            await commandHandler.execute(command, sock, msg, args);
+          if (botPublic || isOwnerMessage) {
+            await commandHandler.execute(command, sock, msg, args, context);
           }
         }
+        
+        // Commandes spéciales du propriétaire
+        if (isOwnerMessage) {
+          if (body === `${prefix}status`) {
+            const commandList = commandHandler.getCommandList();
+            await sendFormattedMessage(sock, from, 
+              `📊 *STATUS*\n\n` +
+              `🔓 Mode: ${botPublic ? 'Public' : 'Privé'}\n` +
+              `📊 Commandes: ${commandList.length}\n` +
+              `🌐 Sessions: ${activeSessions.size}/${MAX_SESSIONS}\n` +
+              `🔗 Web: http://localhost:${config.webPort || 3000}`
+            );
+          }
+          
+          if (body === `${prefix}public`) {
+            botPublic = true;
+            await sendFormattedMessage(sock, from, `✅ Mode public activé`);
+          }
+          
+          if (body === `${prefix}private`) {
+            botPublic = false;
+            await sendFormattedMessage(sock, from, `🔒 Mode privé activé`);
+          }
+          
+          if (body === `${prefix}sessions`) {
+            const sessions = Array.from(activeSessions.values());
+            let sessionsText = `📱 *Sessions actives* (${sessions.length}/${MAX_SESSIONS})\n\n`;
+            
+            if (sessions.length === 0) {
+              sessionsText += "Aucune session active";
+            } else {
+              sessions.forEach((session, index) => {
+                const expiresIn = Math.floor((session.expiry - Date.now()) / 1000);
+                sessionsText += `${index + 1}. ${session.phone}\n   Code: ${session.code}\n   Expire dans: ${expiresIn}s\n\n`;
+              });
+            }
+            
+            await sendFormattedMessage(sock, from, sessionsText);
+          }
+        }
+        
       } catch (error) {
         console.log(`${colors.red}❌ Erreur traitement message: ${error.message}${colors.reset}`);
       }
     });
 
-    // 🚀 INTERFACE CONSOLE SIMPLIFIÉE
+    // 🚀 INTERFACE CONSOLE
     rl.on("line", (input) => {
       const args = input.trim().split(/ +/);
       const command = args.shift().toLowerCase();
@@ -499,22 +681,49 @@ ${colors.magenta}╔════════════════════
           console.log(`${colors.cyan}📊 STATUT DU BOT${colors.reset}`);
           console.log(`${colors.yellow}• Connecté: ${botReady ? 'OUI' : 'NON'}${colors.reset}`);
           console.log(`${colors.yellow}• Mode: ${botPublic ? 'PUBLIC' : 'PRIVÉ'}${colors.reset}`);
-          console.log(`${colors.yellow}• Socket: ${sock ? 'ACTIF' : 'INACTIF'}${colors.reset}`);
-          console.log(`${colors.yellow}• Codes pairing: ${pairingCodes.size}${colors.reset}`);
+          console.log(`${colors.yellow}• Commandes: ${commandHandler.getCommandList().length}${colors.reset}`);
+          console.log(`${colors.yellow}• Sessions: ${activeSessions.size}/${MAX_SESSIONS}${colors.reset}`);
+          console.log(`${colors.yellow}• Propriétaire: ${config.ownerNumber}${colors.reset}`);
+          console.log(`${colors.yellow}• Web: http://localhost:${config.webPort || 3000}${colors.reset}`);
+          break;
+          
+        case "sessions":
+          console.log(`${colors.cyan}📱 SESSIONS ACTIVES${colors.reset}`);
+          if (activeSessions.size === 0) {
+            console.log(`${colors.yellow}Aucune session active${colors.reset}`);
+          } else {
+            activeSessions.forEach((session, phone) => {
+              const expiresIn = Math.floor((session.expiry - Date.now()) / 1000);
+              console.log(`${colors.green}${phone}: ${session.code} (expire dans ${expiresIn}s)${colors.reset}`);
+            });
+          }
           break;
           
         case "clear":
           console.clear();
+          console.log(`
+${colors.magenta}╔══════════════════════════════════════════════════╗
+║         WHATSAPP BOT - HEXGATE EDITION          ║
+╠══════════════════════════════════════════════════╣
+║${colors.green} ✅ BOT AVEC INTERFACE WEB DE PAIRING      ${colors.magenta}║
+║${colors.green} ✅ LIMITE DE ${MAX_SESSIONS} SESSIONS SIMULTANÉES ${colors.magenta}║
+║${colors.green} ✅ CHARGEMENT DES COMMANDES DU DOSSIER     ${colors.magenta}║
+╚══════════════════════════════════════════════════╝${colors.reset}
+`);
           break;
           
         case "exit":
-          console.log(`${colors.yellow}👋 Arrêt...${colors.reset}`);
+          console.log(`${colors.yellow}👋 Arrêt du bot...${colors.reset}`);
           rl.close();
           process.exit(0);
           break;
           
         default:
-          console.log(`${colors.cyan}Commandes: status, clear, exit${colors.reset}`);
+          console.log(`${colors.yellow}⚠️ Commandes console:${colors.reset}`);
+          console.log(`${colors.cyan}  • status - Afficher statut${colors.reset}`);
+          console.log(`${colors.cyan}  • sessions - Lister sessions${colors.reset}`);
+          console.log(`${colors.cyan}  • clear - Nettoyer console${colors.reset}`);
+          console.log(`${colors.cyan}  • exit - Quitter${colors.reset}`);
       }
     });
 
@@ -524,6 +733,17 @@ ${colors.magenta}╔════════════════════
   }
 }
 
-// ==================== DÉMARRAGE ====================
-console.log(`${colors.magenta}🚀 Démarrage de HEXGATE V3...${colors.reset}`);
+// ============================================
+// 🚀 DÉMARRAGE
+// ============================================
+console.log(`
+${colors.magenta}╔══════════════════════════════════════════════════╗
+║         WHATSAPP BOT - HEXGATE EDITION          ║
+╠══════════════════════════════════════════════════╣
+║${colors.green} ✅ BOT AVEC INTERFACE WEB DE PAIRING      ${colors.magenta}║
+║${colors.green} ✅ LIMITE DE ${MAX_SESSIONS} SESSIONS SIMULTANÉES ${colors.magenta}║
+║${colors.green} ✅ CHARGEMENT DES COMMANDES DU DOSSIER     ${colors.magenta}║
+╚══════════════════════════════════════════════════╝${colors.reset}
+`);
+
 startBot();
