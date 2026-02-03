@@ -1,33 +1,26 @@
-version : 1
+version: 1
 services:
   - type: web
     name: hexgate-bot
     env: node
-    region: frankfurt  # Meilleur pour l'Afrique (RD Congo)
-    branch: main
-    rootDir: .
+    region: frankfurt
     buildCommand: |
       echo "🚀 Installation des dépendances..."
-      npm install
-      echo "📁 Création des dossiers nécessaires..."
+      # Ignorer les vérifications d'engine
+      npm config set engine-strict false
+      # Installer avec legacy peer deps
+      npm install --legacy-peer-deps --ignore-engines
+      echo "📁 Création des dossiers..."
       mkdir -p auth_info_baileys deleted_messages viewOnce deleted_images website
       echo "✅ Build terminé"
     startCommand: node index.js
     healthCheckPath: /health
-    healthCheckTimeout: 30
-    autoDeploy: true
-    disk:
-      name: whatsapp-auth
-      mountPath: /opt/render/project/src/auth_info_baileys
-      sizeGB: 1
     envVars:
       - key: NODE_VERSION
-        value: 18.17.0
+        value: 20.11.0  # Ou 21.x
       - key: NODE_ENV
         value: production
       - key: PORT
         value: 10000
-      - key: TZ
-        value: Africa/Kinshasa
+    autoDeploy: true
     plan: free
-    numInstances: 1
