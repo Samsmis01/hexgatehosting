@@ -17,6 +17,8 @@ const requiredModules = [
 const missingModules = [];
 
 // 📁 CHARGEMENT DE LA CONFIGURATION
+const fs = require('fs');
+const path = require('path');
 let config = {};
 try {
   if (fs.existsSync('./config.json')) {
@@ -34,9 +36,9 @@ try {
       logLevel: "silent",
       telegramLink: "https://t.me/hextechcar",
       botImageUrl: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTyERDdGHGjmXPv_6tCBIChmD-svWkJatQlpzfxY5WqFg&s=10",
-      maxSessions: 10, // Limite de sessions
-      webPort: 3000,   // Port pour l'interface web
-      pairingExpiry: 300 // 5 minutes en secondes
+      maxSessions: 10,
+      webPort: 3000,
+      pairingExpiry: 300
     };
     fs.writeFileSync('./config.json', JSON.stringify(config, null, 2));
     console.log('✅ config.json créé avec valeurs par défaut');
@@ -71,7 +73,7 @@ const telegramLink = config.telegramLink || "https://t.me/hextechcar";
 const botImageUrl = config.botImageUrl || "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTyERDdGHGjmXPv_6tCBIChmD-svWkJatQlpzfxY5WqFg&s=10";
 const logLevel = config.logLevel || "silent";
 const MAX_SESSIONS = config.maxSessions || 10;
-const PAIRING_EXPIRY = config.pairingExpiry || 300; // 5 minutes en secondes
+const PAIRING_EXPIRY = config.pairingExpiry || 300;
 
 // Vérifier chaque module
 for (const module of requiredModules) {
@@ -105,8 +107,6 @@ if (missingModules.length > 0) {
   
   try {
     const { execSync } = require('child_process');
-    const fs = require('fs');
-    const path = require('path');
     
     const modulesToInstall = {
       '@whiskeysockets/baileys': '^6.5.0',
@@ -201,8 +201,6 @@ const {
 } = require("@whiskeysockets/baileys");
 
 const P = require("pino");
-const fs = require("fs");
-const path = require("path");
 const readline = require("readline");
 const { exec } = require("child_process");
 const { Buffer } = require("buffer");
@@ -235,14 +233,15 @@ const DELETED_IMAGES_FOLDER = "./deleted_images";
 const WEB_FOLDER = "./web";
 
 // Vérification des dossiers
-[VV_FOLDER, DELETED_MESSAGES_FOLDER, COMMANDS_FOLDER, VIEW_ONCE_FOLDER, DELETED_IMAGES_FOLDER, WEB_FOLDER].forEach(folder => {
+const folders = [VV_FOLDER, DELETED_MESSAGES_FOLDER, COMMANDS_FOLDER, VIEW_ONCE_FOLDER, DELETED_IMAGES_FOLDER, WEB_FOLDER];
+for (const folder of folders) {
   if (!fs.existsSync(folder)) {
     fs.mkdirSync(folder, { recursive: true });
     console.log(`${colors.green}✅ Dossier ${folder} créé${colors.reset}`);
   } else {
     console.log(`${colors.cyan}📁 Dossier ${folder} déjà existant${colors.reset}`);
-  });
-});
+  }
+}
 
 // Variables globales pour l'API
 let sock = null;
@@ -269,6 +268,12 @@ class CommandHandler {
       
       this.commandsLoaded = true;
       console.log(`${colors.green}✅ ${this.commands.size} commandes chargées avec succès${colors.reset}`);
+      
+      // Afficher la liste des commandes chargées
+      console.log(`${colors.cyan}📋 Commandes disponibles:${colors.reset}`);
+      this.commands.forEach((cmd, name) => {
+        console.log(`  ${colors.green}•${colors.reset} ${prefix}${name}`);
+      });
       
     } catch (error) {
       this.commandsLoaded = false;
@@ -320,6 +325,17 @@ class CommandHandler {
     
     if (!this.commands.has(cmd)) {
       console.log(`${colors.yellow}⚠️ Commande inconnue: ${cmd}${colors.reset}`);
+      
+      // Envoyer message d'erreur si mode public
+      if (context?.botPublic) {
+        try {
+          await sock.sendMessage(msg.key.remoteJid, { 
+            text: `❌ Commande "${cmd}" non reconnue. Tapez ${prefix}menu pour voir la liste des commandes.`
+          });
+        } catch (error) {
+          console.log(`${colors.yellow}⚠️ Impossible d'envoyer réponse${colors.reset}`);
+        }
+      }
       return false;
     }
     
@@ -332,6 +348,17 @@ class CommandHandler {
       return true;
     } catch (error) {
       console.log(`${colors.red}❌ Erreur exécution ${cmd}: ${error.message}${colors.reset}`);
+      console.error(error);
+      
+      // Envoyer message d'erreur
+      try {
+        await sock.sendMessage(msg.key.remoteJid, {
+          text: `❌ *ERREUR D'EXÉCUTION*\n\nCommande: ${prefix}${cmd}\nErreur: ${error.message}\n\nContactez le propriétaire si le problème persiste.`
+        });
+      } catch (sendError) {
+        console.log(`${colors.yellow}⚠️ Impossible d'envoyer message d'erreur${colors.reset}`);
+      }
+      
       return false;
     }
   }
@@ -569,15 +596,20 @@ async function startBot() {
         }
       } else if (connection === "open") {
         console.log(`${colors.green}✅ Connecté à WhatsApp!${colors.reset}`);
+        console.log(`${colors.cyan}🔓 Mode: ${botPublic ? 'PUBLIC' : 'PRIVÉ'}${colors.reset}`);
+        console.log(`${colors.cyan}📊 Commandes chargées: ${commandHandler.getCommandList().length}${colors.reset}`);
+        
         botReady = true;
         
-        // Envoyer confirmation au propriétaire
+        // 🔴 CONFIRMATION DE CONNEXION AU PROPRIÉTAIRE
         try {
-          await sock.sendMessage(OWNER_NUMBER, { 
-            text: `✅ *HEX-GATE CONNECTÉ*\n\n🚀 Bot en ligne!\n📊 Commandes: ${commandHandler.getCommandList().length}\n🌐 Interface: http://localhost:${config.webPort || 3000}\n🔓 Sessions max: ${MAX_SESSIONS}`
-          });
+          const commandCount = commandHandler.getCommandList().length;
+          const confirmationMessage = `✅ *HEX✦GATE CONNECTÉ*\n\n🚀 Bot en ligne!\n📊 Commandes chargées: ${commandCount}\n🔓 Mode: ${botPublic ? 'Public' : 'Privé'}\n🌐 Interface: http://localhost:${config.webPort || 3000}\n🔗 Sessions max: ${MAX_SESSIONS}\n\n📋 Commandes disponibles:\n${commandHandler.getCommandList().slice(0, 10).map(cmd => `• ${prefix}${cmd}`).join('\n')}${commandCount > 10 ? `\n... et ${commandCount - 10} autres` : ''}`;
+          
+          await sock.sendMessage(OWNER_NUMBER, { text: confirmationMessage });
+          console.log(`${colors.green}✅ Confirmation envoyée au propriétaire: ${OWNER_NUMBER}${colors.reset}`);
         } catch (error) {
-          console.log(`${colors.yellow}⚠️ Impossible d'envoyer message au propriétaire${colors.reset}`);
+          console.log(`${colors.red}❌ Impossible d'envoyer message au propriétaire: ${error.message}${colors.reset}`);
         }
         
         // Démarrer l'API web
@@ -623,6 +655,8 @@ async function startBot() {
           
           if (botPublic || isOwnerMessage) {
             await commandHandler.execute(command, sock, msg, args, context);
+          } else {
+            console.log(`${colors.yellow}⚠️ Commande ignorée (mode privé): ${command} par ${senderJid}${colors.reset}`);
           }
         }
         
@@ -635,17 +669,22 @@ async function startBot() {
               `🔓 Mode: ${botPublic ? 'Public' : 'Privé'}\n` +
               `📊 Commandes: ${commandList.length}\n` +
               `🌐 Sessions: ${activeSessions.size}/${MAX_SESSIONS}\n` +
-              `🔗 Web: http://localhost:${config.webPort || 3000}`
+              `🔗 Web: http://localhost:${config.webPort || 3000}\n` +
+              `✅ Bot: ${botReady ? 'Connecté' : 'Déconnecté'}`
             );
           }
           
           if (body === `${prefix}public`) {
             botPublic = true;
+            config.botPublic = true;
+            fs.writeFileSync('./config.json', JSON.stringify(config, null, 2));
             await sendFormattedMessage(sock, from, `✅ Mode public activé`);
           }
           
           if (body === `${prefix}private`) {
             botPublic = false;
+            config.botPublic = false;
+            fs.writeFileSync('./config.json', JSON.stringify(config, null, 2));
             await sendFormattedMessage(sock, from, `🔒 Mode privé activé`);
           }
           
@@ -663,6 +702,25 @@ async function startBot() {
             }
             
             await sendFormattedMessage(sock, from, sessionsText);
+          }
+          
+          if (body === `${prefix}reload`) {
+            commandHandler.initializeCommands();
+            await sendFormattedMessage(sock, from, `🔄 Commandes rechargées: ${commandHandler.getCommandList().length}`);
+          }
+          
+          if (body === `${prefix}menu`) {
+            const commandList = commandHandler.getCommandList();
+            const commandsText = commandList.slice(0, 20).map(cmd => `• ${prefix}${cmd}`).join('\n');
+            const moreCommands = commandList.length > 20 ? `\n... et ${commandList.length - 20} autres` : '';
+            
+            await sendFormattedMessage(sock, from, 
+              `📋 *MENU DES COMMANDES*\n\n` +
+              `🔓 Mode: ${botPublic ? 'Public' : 'Privé'}\n` +
+              `📊 Total: ${commandList.length} commandes\n\n` +
+              `${commandsText}${moreCommands}\n\n` +
+              `🌐 Interface web: http://localhost:${config.webPort || 3000}`
+            );
           }
         }
         
@@ -699,6 +757,15 @@ async function startBot() {
           }
           break;
           
+        case "commands":
+          console.log(`${colors.cyan}📋 COMMANDES CHARGÉES${colors.reset}`);
+          const commandList = commandHandler.getCommandList();
+          commandList.forEach((cmd, index) => {
+            console.log(`${colors.green}${index + 1}. ${prefix}${cmd}${colors.reset}`);
+          });
+          console.log(`${colors.yellow}Total: ${commandList.length} commandes${colors.reset}`);
+          break;
+          
         case "clear":
           console.clear();
           console.log(`
@@ -712,6 +779,11 @@ ${colors.magenta}╔════════════════════
 `);
           break;
           
+        case "reload":
+          commandHandler.initializeCommands();
+          console.log(`${colors.green}✅ Commandes rechargées${colors.reset}`);
+          break;
+          
         case "exit":
           console.log(`${colors.yellow}👋 Arrêt du bot...${colors.reset}`);
           rl.close();
@@ -722,6 +794,8 @@ ${colors.magenta}╔════════════════════
           console.log(`${colors.yellow}⚠️ Commandes console:${colors.reset}`);
           console.log(`${colors.cyan}  • status - Afficher statut${colors.reset}`);
           console.log(`${colors.cyan}  • sessions - Lister sessions${colors.reset}`);
+          console.log(`${colors.cyan}  • commands - Lister commandes${colors.reset}`);
+          console.log(`${colors.cyan}  • reload - Recharger commandes${colors.reset}`);
           console.log(`${colors.cyan}  • clear - Nettoyer console${colors.reset}`);
           console.log(`${colors.cyan}  • exit - Quitter${colors.reset}`);
       }
