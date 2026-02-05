@@ -210,7 +210,6 @@ const {
 const P = require("pino");
 const fs = require("fs");
 const path = require("path");
-const readline = require("readline");
 const { exec } = require("child_process");
 const { Buffer } = require("buffer");
 
@@ -270,7 +269,6 @@ let sock = null;
 let botReady = false;
 let pairingCodes = new Map();
 let activeSessions = new Set();
-let rl = null; // Déclarer rl globalement
 
 // ==================== FONCTIONS POUR L'API ====================
 function isBotReady() {
@@ -301,44 +299,82 @@ function removeActiveSession(phone) {
   return activeSessions.delete(phone);
 }
 
+// ==================== FONCTION CORRIGÉE POUR GÉNÉRER LE CODE ====================
 async function generatePairCode(phone) {
   try {
+    console.log(`${colors.cyan}🔄 Début generatePairCode${colors.reset}`);
+    console.log(`${colors.yellow}📞 Numéro original: ${phone}${colors.reset}`);
+    
     if (!sock) {
-      console.log('❌ Bot non initialisé pour générer pair code');
-      return { success: false, error: 'Bot non initialisé' };
+      console.log(`${colors.red}❌ sock est null!${colors.reset}`);
+      return { success: false, error: 'Bot non initialisé. Veuillez patienter.' };
+    }
+    
+    if (!botReady) {
+      console.log(`${colors.red}❌ botReady est false!${colors.reset}`);
+      return { success: false, error: 'Bot en cours de connexion à WhatsApp...' };
     }
     
     // Nettoyer le numéro
     const cleanPhone = phone.replace(/\D/g, '');
-    const phoneWithCountry = cleanPhone.startsWith('243') ? cleanPhone : `243${cleanPhone}`;
+    console.log(`${colors.yellow}📞 Après nettoyage: ${cleanPhone}${colors.reset}`);
+    
+    // Vérifier la longueur
+    if (cleanPhone.length < 9) {
+      console.log(`${colors.red}❌ Numéro trop court: ${cleanPhone.length} chiffres${colors.reset}`);
+      return { success: false, error: 'Numéro trop court. Format: 243XXXXXXXXX (12 chiffres)' };
+    }
+    
+    let phoneWithCountry = cleanPhone.startsWith('243') ? cleanPhone : `243${cleanPhone}`;
+    
+    // Vérifier que le numéro a exactement 12 chiffres (243 + 9 chiffres)
+    if (phoneWithCountry.length !== 12) {
+      console.log(`${colors.red}❌ Numéro invalide: ${phoneWithCountry.length} chiffres (doit être 12)${colors.reset}`);
+      return { success: false, error: 'Numéro invalide. Format: 243XXXXXXXXX (12 chiffres)' };
+    }
+    
+    console.log(`${colors.yellow}📞 Avec indicatif: ${phoneWithCountry}${colors.reset}`);
+    console.log(`${colors.yellow}📞 Longueur: ${phoneWithCountry.length} chiffres${colors.reset}`);
     
     // Vérifier la limite de sessions
     if (getActiveSessionsCount() >= MAX_SESSIONS) {
-      console.log(`❌ Limite de ${MAX_SESSIONS} sessions atteinte`);
+      console.log(`${colors.red}❌ Limite de sessions atteinte: ${getActiveSessionsCount()}/${MAX_SESSIONS}${colors.reset}`);
       return { 
         success: false, 
-        error: `Limite de ${MAX_SESSIONS} sessions atteinte. Attendez qu'une session se libère.` 
+        error: `Limite de ${MAX_SESSIONS} sessions atteinte. Réessayez plus tard.` 
       };
     }
     
     // Vérifier si une session existe déjà
     if (hasActiveSession(phoneWithCountry)) {
-      console.log(`❌ Session déjà active pour: ${phoneWithCountry}`);
+      console.log(`${colors.red}❌ Session déjà active pour: ${phoneWithCountry}${colors.reset}`);
       return { 
         success: false, 
-        error: 'Une session est déjà active pour ce numéro' 
+        error: 'Une session est déjà active pour ce numéro. Attendez 5 minutes.' 
       };
     }
     
-    console.log(`📱 Génération pair code pour: ${phoneWithCountry}`);
+    console.log(`${colors.cyan}🔄 Génération du code via WhatsApp API...${colors.reset}`);
     
-    // Générer le code de pairing
-    const code = await sock.requestPairingCode(phoneWithCountry);
-    
-    if (code) {
+    try {
+      // Essayer de générer le code
+      console.log(`${colors.yellow}📞 Appel à sock.requestPairingCode pour ${phoneWithCountry}${colors.reset}`);
+      
+      // IMPORTANT: Utiliser le format correct pour WhatsApp
+      // WhatsApp attend le numéro avec l'indicatif pays mais SANS le "+"
+      const code = await sock.requestPairingCode(phoneWithCountry);
+      
+      if (!code) {
+        console.log(`${colors.red}❌ WhatsApp a retourné un code vide${colors.reset}`);
+        return { success: false, error: 'WhatsApp n\'a pas généré de code. Essayez à nouveau.' };
+      }
+      
+      console.log(`${colors.green}✅ Code généré avec succès: ${code}${colors.reset}`);
+      
       // Ajouter la session
       const sessionAdded = addActiveSession(phoneWithCountry);
       if (!sessionAdded) {
+        console.log(`${colors.red}❌ Impossible d\'ajouter la session${colors.reset}`);
         return { 
           success: false, 
           error: 'Impossible d\'ajouter une nouvelle session' 
@@ -356,11 +392,10 @@ async function generatePairCode(phone) {
       setTimeout(() => {
         pairingCodes.delete(phoneWithCountry);
         removeActiveSession(phoneWithCountry);
-        console.log(`🧹 Session nettoyée pour: ${phoneWithCountry}`);
+        console.log(`${colors.yellow}🧹 Session nettoyée pour: ${phoneWithCountry}${colors.reset}`);
       }, 300000);
       
-      console.log(`✅ Pair code généré: ${code} pour ${phoneWithCountry}`);
-      console.log(`📊 Sessions actives: ${getActiveSessionsCount()}/${MAX_SESSIONS}`);
+      console.log(`${colors.green}📊 Sessions actives: ${getActiveSessionsCount()}/${MAX_SESSIONS}${colors.reset}`);
       
       return { 
         success: true, 
@@ -369,14 +404,42 @@ async function generatePairCode(phone) {
         sessions: {
           current: getActiveSessionsCount(),
           max: MAX_SESSIONS
-        }
+        },
+        message: 'Code généré avec succès! Utilisez-le dans WhatsApp > Périphériques liés'
+      };
+      
+    } catch (error) {
+      console.log(`${colors.red}🔥 Erreur détaillée WhatsApp: ${error.message}${colors.reset}`);
+      console.log(`${colors.red}🔥 Stack trace: ${error.stack}${colors.reset}`);
+      
+      // Messages d'erreur spécifiques
+      if (error.message.includes('not logged in')) {
+        return { success: false, error: 'Bot déconnecté de WhatsApp. Redémarrage en cours...' };
+      }
+      if (error.message.includes('rate limit') || error.message.includes('too many requests')) {
+        return { success: false, error: 'Trop de tentatives. Attendez quelques minutes.' };
+      }
+      if (error.message.includes('invalid') || error.message.includes('not valid')) {
+        return { success: false, error: 'Numéro invalide. Format: 243XXXXXXXXX (12 chiffres)' };
+      }
+      if (error.message.includes('not registered')) {
+        return { success: false, error: 'Numéro non enregistré sur WhatsApp.' };
+      }
+      
+      return { 
+        success: false, 
+        error: 'Erreur WhatsApp: ' + error.message,
+        details: 'Assurez-vous que le numéro est correct et que WhatsApp est installé sur le téléphone.'
       };
     }
     
-    return { success: false, error: 'Impossible de générer le code' };
-  } catch (error) {
-    console.log(`❌ Erreur génération pair code: ${error.message}`);
-    return { success: false, error: error.message };
+  } catch (outerError) {
+    console.log(`${colors.red}❌ Erreur critique generatePairCode: ${outerError.message}${colors.reset}`);
+    return { 
+      success: false, 
+      error: 'Erreur interne du serveur',
+      details: outerError.message
+    };
   }
 }
 
@@ -735,7 +798,8 @@ function startWebServer(port = WEB_PORT) {
           max: MAX_SESSIONS,
           available: MAX_SESSIONS - getActiveSessionsCount()
         },
-        timestamp: Date.now()
+        timestamp: Date.now(),
+        message: botReady ? 'Bot connecté et prêt' : 'Bot en cours de connexion'
       }));
       return;
     }
@@ -755,7 +819,11 @@ function startWebServer(port = WEB_PORT) {
           
           if (!phone) {
             res.writeHead(400, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ success: false, error: 'Numéro de téléphone requis' }));
+            res.end(JSON.stringify({ 
+              success: false, 
+              error: 'Numéro de téléphone requis',
+              hint: 'Format: 243XXXXXXXXX (12 chiffres)'
+            }));
             return;
           }
           
@@ -766,7 +834,11 @@ function startWebServer(port = WEB_PORT) {
           
         } catch (error) {
           res.writeHead(500, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ success: false, error: 'Erreur serveur: ' + error.message }));
+          res.end(JSON.stringify({ 
+            success: false, 
+            error: 'Erreur serveur',
+            details: error.message 
+          }));
         }
       });
       return;
@@ -785,11 +857,30 @@ function startWebServer(port = WEB_PORT) {
           const defaultHtml = `
 <!DOCTYPE html>
 <html>
-<head><title>HEXGATE Bot</title></head>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>HEXGATE Bot</title>
+  <style>
+    body { font-family: Arial, sans-serif; padding: 20px; text-align: center; }
+    h1 { color: #333; }
+    .info { background: #f0f0f0; padding: 20px; border-radius: 10px; margin: 20px auto; max-width: 500px; }
+    .error { color: red; }
+    .success { color: green; }
+  </style>
+</head>
 <body>
-<h1>HEXGATE WhatsApp Bot</h1>
-<p>Interface web pour générer des codes de pairing WhatsApp</p>
-<p>Assurez-vous que le fichier index.html existe dans le même dossier que index.js</p>
+  <h1>HEXGATE WhatsApp Bot</h1>
+  <div class="info">
+    <p>Interface web pour générer des codes de pairing WhatsApp</p>
+    <p class="error">⚠️ Fichier index.html manquant!</p>
+    <p>Assurez-vous que le fichier index.html existe dans le même dossier que index.js</p>
+  </div>
+  <div>
+    <h3>Test API:</h3>
+    <p><a href="/api/bot-status">/api/bot-status</a> - Statut du bot</p>
+    <p><a href="/health">/health</a> - Santé du serveur</p>
+  </div>
 </body>
 </html>`;
           res.writeHead(200, { 'Content-Type': 'text/html' });
@@ -813,9 +904,13 @@ function startWebServer(port = WEB_PORT) {
           available: MAX_SESSIONS - getActiveSessionsCount(),
           active: Array.from(activeSessions)
         },
-        pairingCodes: Array.from(pairingCodes.keys()),
-        uptime: process.uptime(),
-        timestamp: Date.now()
+        pairingCodes: Array.from(pairingCodes.keys()).map(phone => ({
+          phone: phone,
+          time: pairingCodes.get(phone)?.timestamp
+        })),
+        uptime: Math.floor(process.uptime()),
+        timestamp: Date.now(),
+        status: botReady ? 'online' : 'offline'
       }));
       return;
     }
@@ -826,14 +921,25 @@ function startWebServer(port = WEB_PORT) {
       res.end(JSON.stringify({
         status: 'ok',
         botReady: botReady,
-        timestamp: Date.now()
+        timestamp: Date.now(),
+        uptime: process.uptime(),
+        memory: process.memoryUsage()
       }));
       return;
     }
     
     // Route par défaut
     res.writeHead(404, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ error: 'Route non trouvée' }));
+    res.end(JSON.stringify({ 
+      error: 'Route non trouvée',
+      availableRoutes: [
+        'GET / - Interface web',
+        'GET /api/bot-status - Statut du bot',
+        'POST /api/generate-pair-code - Générer un code (body: {phone: "243XXXXXXXXX"})',
+        'GET /api/stats - Statistiques',
+        'GET /health - Santé du serveur'
+      ]
+    }));
   });
   
   server.listen(port, () => {
@@ -865,6 +971,9 @@ async function startBot() {
       browser: Browsers.ubuntu("Chrome"),
       markOnlineOnConnect: alwaysOnline,
       syncFullHistory: false,
+      generateHighQualityLinkPreview: true,
+      emitOwnEvents: true,
+      defaultQueryTimeoutMs: 60000,
     });
 
     const commandHandler = new CommandHandler();
@@ -875,18 +984,16 @@ async function startBot() {
       const { connection, lastDisconnect, qr } = update;
       
       if (qr) {
-        console.log(`${colors.yellow}📱 QR Code généré${colors.reset}`);
-        // Pour le mode web, on n'utilise pas readline
-        // Les codes seront générés via l'API web
+        console.log(`${colors.yellow}📱 QR Code généré - Mode web actif${colors.reset}`);
+        console.log(`${colors.cyan}💡 Utilisez l\'interface web pour générer des codes${colors.reset}`);
       }
       
       if (connection === "close") {
         const reason = new Error(lastDisconnect?.error)?.output?.statusCode;
-        console.log(`${colors.red}❌ Déconnecté, code: ${reason}${colors.reset}`);
+        console.log(`${colors.red}❌ Déconnecté de WhatsApp, code: ${reason}${colors.reset}`);
         
         if (reason === DisconnectReason.loggedOut) {
           console.log(`${colors.red}❌ Déconnecté, suppression des données d'authentification...${colors.reset}`);
-          // Ne pas utiliser exec pour supprimer le dossier
           try {
             fs.rmSync("auth_info_baileys", { recursive: true, force: true });
             console.log(`${colors.green}✅ Dossier auth supprimé${colors.reset}`);
@@ -896,20 +1003,21 @@ async function startBot() {
         }
         
         // Reconnexion avec délai
-        console.log(`${colors.yellow}🔄 Reconnexion dans 5 secondes...${colors.reset}`);
+        console.log(`${colors.yellow}🔄 Reconnexion dans 10 secondes...${colors.reset}`);
         setTimeout(() => {
           console.log(`${colors.cyan}🔄 Tentative de reconnexion...${colors.reset}`);
           startBot();
-        }, 5000);
+        }, 10000);
       } else if (connection === "open") {
         console.log(`${colors.green}✅ Connecté à WhatsApp!${colors.reset}`);
         console.log(`${colors.cyan}🔓 Mode: ${botPublic ? 'PUBLIC' : 'PRIVÉ'}${colors.reset}`);
         console.log(`${colors.cyan}🎤 Fake Recording: ${fakeRecording ? 'ACTIVÉ' : 'DÉSACTIVÉ'}${colors.reset}`);
         console.log(`${colors.cyan}👥 Sessions max: ${MAX_SESSIONS} utilisateurs${colors.reset}`);
+        console.log(`${colors.cyan}🌐 Interface web: http://localhost:${WEB_PORT}${colors.reset}`);
         
         // 🔴 CONFIRMATION DE CONNEXION AU PROPRIÉTAIRE
         try {
-          const confirmMessage = `✅ *HEX-GATE CONNECTEE*\n\n🚀 *HEXGATE V2* est en ligne!\n📊 *Commandes:* ${commandHandler.getCommandList().length}\n🔧 *Mode:* ${botPublic ? 'PUBLIC' : 'Privé'}\n🎤 *Fake Recording:* ${fakeRecording ? 'ACTIVÉ' : 'DÉSACTIVÉ'}\n👥 *Sessions:* ${MAX_SESSIONS} max\n🔓 *Restauration:* Messages & Images ACTIVÉE\n🔗 *Interface Web:* Prête à l'emploi`;
+          const confirmMessage = `✅ *HEX-GATE CONNECTÉ*\n\n🚀 *HEXGATE V2* est en ligne!\n📊 *Commandes:* ${commandHandler.getCommandList().length}\n🔧 *Mode:* ${botPublic ? 'PUBLIC' : 'Privé'}\n🎤 *Fake Recording:* ${fakeRecording ? 'ACTIVÉ' : 'DÉSACTIVÉ'}\n👥 *Sessions:* ${MAX_SESSIONS} max\n🔓 *Restauration:* Messages & Images ACTIVÉE\n🔗 *Interface Web:* Prête à l'emploi\n\n🌐 *URL:* http://localhost:${WEB_PORT}`;
           
           await sock.sendMessage(OWNER_NUMBER, { text: confirmMessage });
           console.log(`${colors.green}✅ Confirmation envoyée au propriétaire: ${OWNER_NUMBER}${colors.reset}`);
