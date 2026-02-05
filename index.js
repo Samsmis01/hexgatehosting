@@ -1,6 +1,12 @@
 console.log('🔧 HEXGATE V3 - Vérification des dépendances...');
 console.log('📦 Version correcte: @whiskeysockets/baileys (avec un seul L)');
 
+// IMPORTANT: Déclarer fs en premier pour pouvoir l'utiliser
+const fs = require('fs');
+const path = require('path');
+const { exec } = require("child_process");
+const readline = require('readline');
+
 const requiredModules = [
   '@whiskeysockets/baileys',
   'pino',
@@ -24,7 +30,7 @@ try {
     config = {
       prefix: ".",
       ownerNumber: "243816107573",
-      botPublic: false,
+      botPublic: true,
       fakeRecording: false,
       antiLink: true,
       alwaysOnline: true,
@@ -42,7 +48,7 @@ try {
   config = {
     prefix: ".",
     ownerNumber: "243816107573",
-    botPublic: false,
+    botPublic: true,
     fakeRecording: false,
     antiLink: true,
     alwaysOnline: true,
@@ -80,8 +86,14 @@ console.log(`  • Port web: ${WEB_PORT}`);
 for (const module of requiredModules) {
   try {
     if (['fs', 'path', 'child_process', 'readline', 'buffer'].includes(module)) {
-      require(module);
-      console.log(`✅ ${module} - PRÉSENT (Node.js)`);
+      if (module === 'fs') continue; // Déjà importé
+      if (module === 'path') continue; // Déjà importé
+      if (module === 'child_process') continue; // Déjà importé
+      if (module === 'readline') continue; // Déjà importé
+      if (module === 'buffer') {
+        require('buffer');
+        console.log(`✅ ${module} - PRÉSENT (Node.js)`);
+      }
     } else {
       require.resolve(module);
       console.log(`✅ ${module} - PRÉSENT`);
@@ -100,8 +112,6 @@ if (missingModules.length > 0) {
   
   try {
     const { execSync } = require('child_process');
-    const fs = require('fs');
-    const path = require('path');
     
     const modulesToInstall = {
       '@whiskeysockets/baileys': '^6.5.0',
@@ -177,7 +187,6 @@ if (missingModules.length > 0) {
     console.log('\n🛠️ INSTALLEZ MANUELLEMENT:');
     console.log('npm install @whiskeysockets/baileys@^6.5.0 pino@^8.19.0');
     
-    const readline = require('readline');
     const rl = readline.createInterface({
       input: process.stdin,
       output: process.stdout
@@ -208,9 +217,6 @@ const {
 } = require("@whiskeysockets/baileys");
 
 const P = require("pino");
-const fs = require("fs");
-const path = require("path");
-const { exec } = require("child_process");
 const { Buffer } = require("buffer");
 
 // Import HTTP pour l'API web
@@ -257,7 +263,7 @@ let lastDeletedMessage = new Map();
 let antiLinkCooldown = new Map();
 let botMessages = new Set();
 let autoReact = true;
-let antiLinkWarnings = new Map(); // Variable manquante ajoutée
+let antiLinkWarnings = new Map();
 
 // Map pour stocker les messages en mémoire
 const messageStore = new Map();
@@ -273,7 +279,7 @@ let activeSessions = new Set();
 
 // ==================== FONCTIONS POUR L'API ====================
 function isBotReady() {
-  return botReady;
+  return botReady && sock !== null;
 }
 
 // Fonction pour compter les sessions actives
@@ -307,13 +313,22 @@ async function generatePairCode(phone) {
     console.log(`${colors.yellow}📞 Numéro original: ${phone}${colors.reset}`);
     
     if (!sock) {
-      console.log(`${colors.red}❌ sock est null!${colors.reset}`);
-      return { success: false, error: 'Bot non initialisé. Veuillez patienter.' };
+      console.log(`${colors.red}❌ sock est null! Le bot n'est pas encore initialisé${colors.reset}`);
+      return { 
+        success: false, 
+        error: 'Bot non initialisé. Le serveur est en cours de démarrage.',
+        hint: 'Attendez quelques secondes que le bot se connecte à WhatsApp'
+      };
     }
     
-    if (!botReady) {
-      console.log(`${colors.red}❌ botReady est false!${colors.reset}`);
-      return { success: false, error: 'Bot en cours de connexion à WhatsApp...' };
+    // Vérifier la connexion WhatsApp
+    if (!botReady || !sock.user) {
+      console.log(`${colors.red}❌ Bot non connecté à WhatsApp!${colors.reset}`);
+      return { 
+        success: false, 
+        error: 'Bot en cours de connexion à WhatsApp...',
+        hint: 'Le bot se connecte à WhatsApp. Veuillez patienter 30 secondes.'
+      };
     }
     
     // Nettoyer le numéro
@@ -362,7 +377,6 @@ async function generatePairCode(phone) {
       console.log(`${colors.yellow}📞 Appel à sock.requestPairingCode pour ${phoneWithCountry}${colors.reset}`);
       
       // IMPORTANT: Utiliser le format correct pour WhatsApp
-      // WhatsApp attend le numéro avec l'indicatif pays mais SANS le "+"
       const code = await sock.requestPairingCode(phoneWithCountry);
       
       if (!code) {
@@ -411,11 +425,14 @@ async function generatePairCode(phone) {
       
     } catch (error) {
       console.log(`${colors.red}🔥 Erreur détaillée WhatsApp: ${error.message}${colors.reset}`);
-      console.log(`${colors.red}🔥 Stack trace: ${error.stack}${colors.reset}`);
       
       // Messages d'erreur spécifiques
       if (error.message.includes('not logged in')) {
-        return { success: false, error: 'Bot déconnecté de WhatsApp. Redémarrage en cours...' };
+        return { 
+          success: false, 
+          error: 'Bot déconnecté de WhatsApp. Reconnexion en cours...',
+          hint: 'Veuillez réessayer dans 30 secondes'
+        };
       }
       if (error.message.includes('rate limit') || error.message.includes('too many requests')) {
         return { success: false, error: 'Trop de tentatives. Attendez quelques minutes.' };
@@ -439,7 +456,7 @@ async function generatePairCode(phone) {
     return { 
       success: false, 
       error: 'Erreur interne du serveur',
-      details: outerError.message
+      details: 'Le bot est en cours de démarrage. Réessayez dans 30 secondes.'
     };
   }
 }
@@ -791,16 +808,18 @@ function startWebServer(port = WEB_PORT) {
     
     // Route pour le statut du bot
     if (req.method === 'GET' && req.url === '/api/bot-status') {
+      const isReady = isBotReady();
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({
-        ready: botReady,
+        ready: isReady,
+        connected: isReady,
         sessions: {
           current: getActiveSessionsCount(),
           max: MAX_SESSIONS,
           available: MAX_SESSIONS - getActiveSessionsCount()
         },
         timestamp: Date.now(),
-        message: botReady ? 'Bot connecté et prêt' : 'Bot en cours de connexion'
+        message: isReady ? 'Bot connecté et prêt' : 'Bot en cours de connexion à WhatsApp...'
       }));
       return;
     }
@@ -815,16 +834,15 @@ function startWebServer(port = WEB_PORT) {
       
       req.on('end', async () => {
         try {
-          // CORRECTION PRINCIPALE: Vérifier si le body contient du HTML (erreur 404)
+          // CORRECTION: Vérifier si le body contient du HTML (erreur 404)
           if (body.trim().startsWith('<!DOCTYPE') || body.includes('<html>')) {
             console.log(`${colors.red}❌ ERREUR: Le serveur a retourné du HTML au lieu du JSON!${colors.reset}`);
-            console.log(`${colors.yellow}📄 Contenu reçu: ${body.substring(0, 200)}...${colors.reset}`);
             
             res.writeHead(400, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ 
               success: false, 
-              error: 'Le serveur est en cours de démarrage. Veuillez réessayer dans quelques secondes.',
-              hint: 'Attendez que le bot soit complètement connecté à WhatsApp'
+              error: 'Serveur en cours de démarrage. Veuillez patienter.',
+              hint: 'Le bot se connecte à WhatsApp. Réessayez dans 30 secondes.'
             }));
             return;
           }
@@ -849,14 +867,13 @@ function startWebServer(port = WEB_PORT) {
           
         } catch (error) {
           console.log(`${colors.red}❌ Erreur parsing JSON: ${error.message}${colors.reset}`);
-          console.log(`${colors.yellow}📄 Body reçu: ${body.substring(0, 200)}...${colors.reset}`);
           
+          // Donner un message d'erreur plus clair
           res.writeHead(500, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ 
             success: false, 
-            error: 'Erreur serveur',
-            details: 'Le serveur a retourné une réponse invalide. Veuillez réessayer.',
-            rawError: error.message
+            error: 'Bot non prêt',
+            details: 'Le bot est en cours de connexion à WhatsApp. Veuillez réessayer dans 30 secondes.'
           }));
         }
       });
@@ -873,8 +890,7 @@ function startWebServer(port = WEB_PORT) {
           res.end(htmlContent);
         } else {
           // Si le fichier n'existe pas, servir une page par défaut
-          const defaultHtml = `
-<!DOCTYPE html>
+          const defaultHtml = `<!DOCTYPE html>
 <html>
 <head>
   <meta charset="UTF-8">
@@ -892,10 +908,15 @@ function startWebServer(port = WEB_PORT) {
     input { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 5px; font-size: 16px; }
     button { background: #4CAF50; color: white; border: none; padding: 12px 24px; border-radius: 5px; cursor: pointer; font-size: 16px; }
     button:hover { background: #45a049; }
+    button:disabled { background: #cccccc; cursor: not-allowed; }
     .result { margin-top: 20px; padding: 15px; border-radius: 5px; display: none; }
     .result.success { background: #e8f5e9; border: 1px solid #a5d6a7; }
     .result.error { background: #ffebee; border: 1px solid #ef9a9a; }
     .code { font-size: 24px; font-weight: bold; color: #1976d2; margin: 10px 0; }
+    .status { padding: 10px; border-radius: 5px; margin: 10px 0; }
+    .status.connected { background: #e8f5e9; color: #388e3c; }
+    .status.connecting { background: #fff3e0; color: #f57c00; }
+    .status.disconnected { background: #ffebee; color: #d32f2f; }
   </style>
 </head>
 <body>
@@ -905,7 +926,9 @@ function startWebServer(port = WEB_PORT) {
       <h3>Interface web pour générer des codes de pairing WhatsApp</h3>
       
       <div id="botStatus" class="form-group">
-        <p>Statut du Bot: <span id="statusText" style="color: orange;">En attente de connexion WhatsApp...</span></p>
+        <div class="status" id="statusBox">
+          <strong>Statut du Bot:</strong> <span id="statusText">Vérification...</span>
+        </div>
         <p>Sessions actives: <span id="sessionsText">0/${MAX_SESSIONS}</span></p>
       </div>
       
@@ -915,13 +938,15 @@ function startWebServer(port = WEB_PORT) {
         <small>Format: 243XXXXXXXXX (12 chiffres)</small>
       </div>
       
-      <button onclick="generateCode()" id="generateBtn">Générer le Code</button>
+      <button onclick="generateCode()" id="generateBtn" disabled>Générer le Code</button>
       
       <div id="result" class="result"></div>
       
       <div style="margin-top: 30px; font-size: 14px; color: #666;">
         <p>⚠️ Note: Le code est valable 5 minutes et peut être utilisé une seule fois</p>
         <p>📱 Utilisation: WhatsApp → Périphériques liés → Lier un appareil → Entrez le code</p>
+        <p>🔒 Votre numéro n'est pas stocké</p>
+        <p>🤖 Bot maintenu par HEX-TECH</p>
       </div>
     </div>
     
@@ -940,22 +965,34 @@ function startWebServer(port = WEB_PORT) {
         const data = await response.json();
         
         const statusText = document.getElementById('statusText');
+        const statusBox = document.getElementById('statusBox');
         const sessionsText = document.getElementById('sessionsText');
+        const generateBtn = document.getElementById('generateBtn');
         
-        if (data.ready) {
-          statusText.textContent = 'Bot connecté ✓';
-          statusText.style.color = 'green';
-          document.getElementById('generateBtn').disabled = false;
+        if (data.ready && data.connected) {
+          statusText.textContent = '✅ Bot connecté à WhatsApp';
+          statusBox.className = 'status connected';
+          generateBtn.disabled = false;
+          generateBtn.textContent = 'Générer le Code';
         } else {
-          statusText.textContent = 'Bot en cours de connexion...';
-          statusText.style.color = 'orange';
-          document.getElementById('generateBtn').disabled = true;
+          statusText.textContent = '⏳ Bot en cours de connexion à WhatsApp...';
+          statusBox.className = 'status connecting';
+          generateBtn.disabled = true;
+          generateBtn.textContent = 'En attente de connexion...';
         }
         
         sessionsText.textContent = \`\${data.sessions.current}/\${data.sessions.max} (Disponibles: \${data.sessions.available})\`;
         
       } catch (error) {
         console.log('Erreur statut:', error);
+        const statusText = document.getElementById('statusText');
+        const statusBox = document.getElementById('statusBox');
+        const generateBtn = document.getElementById('generateBtn');
+        
+        statusText.textContent = '❌ Erreur de connexion au serveur';
+        statusBox.className = 'status disconnected';
+        generateBtn.disabled = true;
+        generateBtn.textContent = 'Serveur hors ligne';
       }
     }
     
@@ -970,7 +1007,8 @@ function startWebServer(port = WEB_PORT) {
       }
       
       // Validation simple
-      if (!/^243\d{9}$/.test(phone.replace(/\D/g, ''))) {
+      const cleanedPhone = phone.replace(/\\D/g, '');
+      if (!/^243\\d{9}$/.test(cleanedPhone)) {
         showResult('Format invalide. Doit être: 243XXXXXXXXX (12 chiffres)', 'error');
         return;
       }
@@ -985,7 +1023,7 @@ function startWebServer(port = WEB_PORT) {
           headers: {
             'Content-Type': 'application/json'
           },
-          body: JSON.stringify({ phone: phone })
+          body: JSON.stringify({ phone: cleanedPhone })
         });
         
         const data = await response.json();
@@ -1008,12 +1046,12 @@ function startWebServer(port = WEB_PORT) {
             </div>
           \`, 'success');
         } else {
-          showResult(\`❌ Erreur: \${data.error}\${data.details ? '<br><small>' + data.details + '</small>' : ''}\`, 'error');
+          showResult(\`❌ \${data.error}\${data.details ? '<br><small>' + data.details + '</small>' : ''}\${data.hint ? '<br><small>' + data.hint + '</small>' : ''}\`, 'error');
         }
         
       } catch (error) {
         console.error('Erreur:', error);
-        showResult('❌ Erreur de connexion au serveur. Vérifiez que le bot est en cours d\'exécution.', 'error');
+        showResult('❌ Erreur de connexion au serveur. Vérifiez que le bot est en cours d\\'exécution.', 'error');
       } finally {
         btn.disabled = false;
         btn.textContent = 'Générer le Code';
@@ -1028,8 +1066,8 @@ function startWebServer(port = WEB_PORT) {
       resultDiv.style.display = 'block';
     }
     
-    // Mettre à jour le statut toutes les 5 secondes
-    setInterval(updateBotStatus, 5000);
+    // Mettre à jour le statut toutes les 3 secondes
+    setInterval(updateBotStatus, 3000);
     updateBotStatus();
   </script>
 </body>
@@ -1049,6 +1087,7 @@ function startWebServer(port = WEB_PORT) {
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({
         botReady: botReady,
+        connected: sock !== null && sock.user !== null,
         sessions: {
           current: getActiveSessionsCount(),
           max: MAX_SESSIONS,
@@ -1072,6 +1111,7 @@ function startWebServer(port = WEB_PORT) {
       res.end(JSON.stringify({
         status: 'ok',
         botReady: botReady,
+        connected: sock !== null,
         timestamp: Date.now(),
         uptime: process.uptime(),
         memory: process.memoryUsage()
@@ -1112,8 +1152,17 @@ async function startBot() {
   try {
     displayBanner();
     
-    // Démarrer le serveur web
+    // Démarrer le serveur web IMMÉDIATEMENT
+    console.log(`${colors.cyan}🌐 Démarrage du serveur web...${colors.reset}`);
     const webServer = startWebServer();
+    
+    console.log(`${colors.cyan}🔗 Interface web disponible sur: http://localhost:${WEB_PORT}${colors.reset}`);
+    console.log(`${colors.yellow}⚠️ IMPORTANT: L'interface web est active mais le bot peut prendre 30-60 secondes pour se connecter à WhatsApp${colors.reset}`);
+    
+    // Attendre un peu avant de se connecter à WhatsApp
+    await delay(2000);
+    
+    console.log(`${colors.cyan}📱 Connexion à WhatsApp en cours...${colors.reset}`);
     
     const { state, saveCreds } = await useMultiFileAuthState("auth_info_baileys");
     const { version } = await fetchLatestBaileysVersion();
@@ -1121,7 +1170,7 @@ async function startBot() {
     sock = makeWASocket({
       version,
       logger: P({ level: logLevel }),
-      printQRInTerminal: false,
+      printQRInTerminal: true, // Afficher le QR code dans le terminal
       auth: state,
       browser: Browsers.ubuntu("Chrome"),
       markOnlineOnConnect: alwaysOnline,
@@ -1139,8 +1188,8 @@ async function startBot() {
       const { connection, lastDisconnect, qr } = update;
       
       if (qr) {
-        console.log(`${colors.yellow}📱 QR Code généré - Mode web actif${colors.reset}`);
-        console.log(`${colors.cyan}💡 Utilisez l\'interface web pour générer des codes${colors.reset}`);
+        console.log(`${colors.yellow}📱 QR Code généré - Scannez-le avec WhatsApp${colors.reset}`);
+        console.log(`${colors.cyan}💡 Vous pouvez aussi utiliser l'interface web pour générer des codes de pairing${colors.reset}`);
       }
       
       if (connection === "close") {
