@@ -9,7 +9,8 @@ const requiredModules = [
   'child_process',
   'readline',
   'buffer',
-  'express' // AJOUT: Pour le serveur web
+  'express',
+  'cors'
 ];
 
 const missingModules = [];
@@ -32,9 +33,10 @@ try {
       logLevel: "silent",
       telegramLink: "https://t.me/hextechcar",
       botImageUrl: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTyERDdGHGjmXPv_6tCBIChmD-svWkJatQlpzfxY5WqFg&s=10",
-      maxSessions: 10, // NOUVEAU: Limite de sessions
-      webPort: 3000,   // NOUVEAU: Port web
-      webEnabled: true // NOUVEAU: Activer le serveur web
+      maxSessions: 10,
+      webPort: 3000,
+      webEnabled: true,
+      useQRCode: false // NOUVEAU: Option pour utiliser QR code au lieu de pairing
     };
     fs.writeFileSync('./config.json', JSON.stringify(config, null, 2));
     console.log('✅ config.json créé avec valeurs par défaut');
@@ -53,7 +55,8 @@ try {
     botImageUrl: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTyERDdGHGjmXPv_6tCBIChmD-svWkJatQlpzfxY5WqFg&s=10",
     maxSessions: 10,
     webPort: 3000,
-    webEnabled: true
+    webEnabled: true,
+    useQRCode: false
   };
 }
 
@@ -68,21 +71,22 @@ const OWNER_NUMBER = `${config.ownerNumber.replace(/\D/g, '')}@s.whatsapp.net`;
 const telegramLink = config.telegramLink || "https://t.me/hextechcar";
 const botImageUrl = config.botImageUrl || "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTyERDdGHGjmXPv_6tCBIChmD-svWkJatQlpzfxY5WqFg&s=10";
 const logLevel = config.logLevel || "silent";
-const MAX_SESSIONS = config.maxSessions || 10; // NOUVEAU: Limite de sessions
-const WEB_PORT = config.webPort || 3000; // NOUVEAU: Port web
+const MAX_SESSIONS = config.maxSessions || 10;
+const WEB_PORT = config.webPort || 3000;
+const USE_QR_CODE = config.useQRCode || false; // NOUVEAU: Option QR code
 
 console.log('📋 Configuration chargée:');
 console.log(`  • Prefix: ${prefix}`);
 console.log(`  • Owner: ${OWNER_NUMBER}`);
 console.log(`  • Mode: ${botPublic ? 'Public' : 'Privé'}`);
-console.log(`  • Fake Recording: ${fakeRecording ? 'Activé' : 'Désactivé'}`);
 console.log(`  • Max Sessions: ${MAX_SESSIONS}`);
 console.log(`  • Web Port: ${WEB_PORT}`);
+console.log(`  • QR Code: ${USE_QR_CODE ? 'Activé' : 'Désactivé'}`);
 
 // Vérifier chaque module
 for (const module of requiredModules) {
   try {
-    if (['fs', 'path', 'child_process', 'readline', 'buffer', 'express'].includes(module)) {
+    if (['fs', 'path', 'child_process', 'readline', 'buffer', 'express', 'cors'].includes(module)) {
       require(module);
       console.log(`✅ ${module} - PRÉSENT (Node.js)`);
     } else {
@@ -90,7 +94,7 @@ for (const module of requiredModules) {
       console.log(`✅ ${module} - PRÉSENT`);
     }
   } catch (error) {
-    if (!['fs', 'path', 'child_process', 'readline', 'buffer', 'express'].includes(module)) {
+    if (!['fs', 'path', 'child_process', 'readline', 'buffer', 'express', 'cors'].includes(module)) {
       missingModules.push(module);
       console.log(`❌ ${module} - MANQUANT`);
     }
@@ -109,7 +113,8 @@ if (missingModules.length > 0) {
     const modulesToInstall = {
       '@whiskeysockets/baileys': '^6.5.0',
       'pino': '^8.19.0',
-      'express': '^4.18.2' // AJOUT: Express pour le serveur web
+      'express': '^4.18.2',
+      'cors': '^2.8.5'
     };
     
     console.log('📄 Création/MAJ package.json...');
@@ -179,24 +184,8 @@ if (missingModules.length > 0) {
   } catch (error) {
     console.log('❌ Erreur installation automatique:', error.message);
     console.log('\n🛠️ INSTALLEZ MANUELLEMENT:');
-    console.log('npm install @whiskeysockets/baileys@^6.5.0 pino@^8.19.0 express@^4.18.2');
-    
-    const readline = require('readline');
-    const rl = readline.createInterface({
-      input: process.stdin,
-      output: process.stdout
-    });
-    
-    rl.question('\nVoulez-vous essayer l\'installation manuelle? (o/n): ', (answer) => {
-      if (answer.toLowerCase() === 'o') {
-        console.log('Exécutez cette commande:');
-        console.log('npm install @whiskeysockets/baileys@^6.5.0 pino@^8.19.0 express@^4.18.2');
-      }
-      rl.close();
-      process.exit(1);
-    });
-    
-    return;
+    console.log('npm install @whiskeysockets/baileys@^6.5.0 pino@^8.19.0 express@^4.18.2 cors@^2.8.5');
+    process.exit(1);
   }
 }
 
@@ -212,21 +201,24 @@ const {
 const P = require("pino");
 const fs = require("fs");
 const path = require("path");
-const readline = require("readline");
 const { exec } = require("child_process");
 const { Buffer } = require("buffer");
-const express = require('express'); // NOUVEAU: Serveur Express
+const express = require('express');
+const cors = require('cors');
 
 // ==================== CONFIGURATION API ====================
 const app = express();
+app.use(cors());
 app.use(express.json());
-app.use(express.static('.')); // Servir les fichiers statiques
+app.use(express.static('.'));
 
-// ⚡ VARIABLES POUR L'API
+// ⚡ VARIABLES GLOBALES
 let sock = null;
 let botReady = false;
-let pairingCodes = new Map(); // Stockage des codes temporaires
-let activeSessions = new Set(); // NOUVEAU: Suivi des sessions actives
+let pairingCodes = new Map();
+let activeSessions = new Set();
+let currentQR = null; // Pour stocker le QR code
+let rl = null; // Variable pour readline
 
 // 🌈 COULEURS POUR LE TERMINAL
 const colors = {
@@ -272,7 +264,8 @@ app.get('/api/bot-status', (req, res) => {
     status: isReady ? 'online' : 'offline',
     message: isReady ? 
       `Bot connecté (${activeSessionCount}/${MAX_SESSIONS} sessions)` : 
-      'Bot non connecté'
+      'Bot non connecté',
+    useQRCode: USE_QR_CODE
   });
 });
 
@@ -318,10 +311,14 @@ app.post('/api/generate-pair-code', async (req, res) => {
     
     console.log(`📱 Génération pair code pour: ${phoneWithCountry}`);
     
-    // Générer le code de pairing
-    const code = await sock.requestPairingCode(phoneWithCountry);
-    
-    if (code) {
+    try {
+      // Générer le code de pairing
+      const code = await sock.requestPairingCode(phoneWithCountry);
+      
+      if (!code) {
+        throw new Error('Aucun code généré');
+      }
+      
       // Ajouter la session
       activeSessions.add(phoneWithCountry);
       
@@ -329,14 +326,16 @@ app.post('/api/generate-pair-code', async (req, res) => {
       pairingCodes.set(phoneWithCountry, {
         code: code,
         timestamp: Date.now(),
-        expiresAt: Date.now() + 300000 // 5 minutes
+        expiresAt: Date.now() + 300000
       });
       
       // Nettoyer après 5 minutes
       setTimeout(() => {
-        pairingCodes.delete(phoneWithCountry);
-        activeSessions.delete(phoneWithCountry);
-        console.log(`🗑️ Session expirée pour: ${phoneWithCountry}`);
+        if (pairingCodes.has(phoneWithCountry)) {
+          pairingCodes.delete(phoneWithCountry);
+          activeSessions.delete(phoneWithCountry);
+          console.log(`🗑️ Session expirée pour: ${phoneWithCountry}`);
+        }
       }, 300000);
       
       console.log(`✅ Pair code généré: ${code} pour ${phoneWithCountry}`);
@@ -350,29 +349,49 @@ app.post('/api/generate-pair-code', async (req, res) => {
         activeSessions: activeSessions.size,
         maxSessions: MAX_SESSIONS
       });
-    } else {
-      return res.status(500).json({ 
-        success: false, 
-        error: 'Impossible de générer le code de pairing' 
-      });
+      
+    } catch (pairError) {
+      console.log(`❌ Erreur génération pair code: ${pairError.message}`);
+      
+      // Vérifier si c'est une erreur de connexion
+      if (pairError.message.includes('connect') || 
+          pairError.message.includes('device') || 
+          pairError.message.includes('timeout') ||
+          pairError.message.includes('not registered')) {
+        
+        return res.status(500).json({ 
+          success: false, 
+          error: 'Impossible de connecter l\'appareil. Vérifiez que: 1. Le numéro est correct sur WhatsApp 2. WhatsApp est bien installé 3. Vous avez une connexion Internet 4. Vous utilisez le bon indicatif pays (+243)' 
+        });
+      }
+      
+      throw pairError;
     }
     
   } catch (error) {
-    console.log(`❌ Erreur génération pair code: ${error.message}`);
-    
-    // Erreur spécifique pour "Impossible de connecter l'appareil"
-    if (error.message.includes("connect") || error.message.includes("device")) {
-      return res.status(500).json({ 
-        success: false, 
-        error: 'Impossible de connecter l\'appareil. Vérifiez que le numéro est correct sur votre appareil WhatsApp.' 
-      });
-    }
+    console.log(`❌ Erreur API generate-pair-code: ${error.message}`);
     
     return res.status(500).json({ 
       success: false, 
       error: error.message || 'Erreur interne du serveur' 
     });
   }
+});
+
+// Route pour obtenir le QR code (si activé)
+app.get('/api/qr-code', (req, res) => {
+  if (!USE_QR_CODE) {
+    return res.status(400).json({ 
+      success: false, 
+      error: 'QR code non activé dans la configuration' 
+    });
+  }
+  
+  res.json({
+    success: true,
+    qrCode: currentQR,
+    ready: botReady
+  });
 });
 
 // Route pour servir index.html
@@ -437,14 +456,14 @@ class CommandHandler {
       // Charger les commandes intégrées de base
       this.loadBuiltinCommands();
       
-      // Charger depuis le dossier commands (MAINTENU)
+      // Charger depuis le dossier commands
       this.loadCommandsFromDirectory();
       
       console.log(`${colors.green}✅ ${this.commands.size} commandes chargées avec succès${colors.reset}`);
       
     } catch (error) {
       console.log(`${colors.red}❌ Erreur chargement commandes: ${error.message}${colors.reset}`);
-      this.loadBuiltinCommands(); // Au moins les commandes de base
+      this.loadBuiltinCommands();
     }
   }
 
@@ -469,7 +488,7 @@ class CommandHandler {
           if (command && command.name && typeof command.execute === 'function') {
             const commandName = command.name.toLowerCase();
             
-            // ⚠️ SUPPRESSION DES COMMANDES SPÉCIFIQUES
+            // Supprimer les commandes spécifiées
             const commandsToRemove = ['quiz', 'ascii', 'hack', 'ping'];
             if (commandsToRemove.includes(commandName)) {
               console.log(`${colors.yellow}⚠️ Commande supprimée: ${commandName}${colors.reset}`);
@@ -493,7 +512,6 @@ class CommandHandler {
   }
 
   loadBuiltinCommands() {
-    // Commandes de base restantes
     const basicCommands = {
       menu: {
         name: "menu",
@@ -529,10 +547,14 @@ class CommandHandler {
 
 *powered by HEXTECH™*`;
 
-          await sock.sendMessage(from, {
-            image: { url: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRv53_O-g3xpl_VtrctVQ0HbSUMCJ3fUkfx6l1SiUc64ag4ypnPyBR5k0s&s=10" },
-            caption: menuText
-          });
+          try {
+            await sock.sendMessage(from, {
+              image: { url: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRv53_O-g3xpl_VtrctVQ0HbSUMCJ3fUkfx6l1SiUc64ag4ypnPyBR5k0s&s=10" },
+              caption: menuText
+            });
+          } catch (error) {
+            await sock.sendMessage(from, { text: menuText });
+          }
         }
       },
       
@@ -591,14 +613,12 @@ class CommandHandler {
             await sock.sendMessage(from, { text: infoText });
             
           } catch (error) {
-            console.log("info error:", error);
             await sendFormattedMessage(sock, from, "❌ Impossible de récupérer les infos");
           }
         }
       }
     };
     
-    // Ajouter les commandes de base
     Object.entries(basicCommands).forEach(([name, cmd]) => {
       this.commands.set(name, cmd);
     });
@@ -634,50 +654,33 @@ function isOwner(senderJid) {
   return normalizedJid === ownerJid;
 }
 
-async function isAdminInGroup(sock, jid, senderJid) {
-  try {
-    if (!jid.endsWith("@g.us")) return false;
-    
-    const metadata = await sock.groupMetadata(jid);
-    const participant = metadata.participants.find(p => p.id === senderJid);
-    
-    if (!participant) return false;
-    return participant.admin === "admin" || participant.admin === "superadmin";
-  } catch (error) {
-    return false;
-  }
-}
-
 // ==================== DÉMARRAGE DU BOT ====================
 async function startBot() {
-  const rl = readline.createInterface({
-    input: process.stdin,
-    output: process.stdout
-  });
-
-  async function askForPhoneNumber() {
-    return new Promise((resolve) => {
-      rl.question(`${colors.cyan}📱 Entrez votre numéro WhatsApp (ex: 243XXXXXXXXX): ${colors.reset}`, (phone) => {
-        resolve(phone.trim());
-      });
-    });
-  }
-
   try {
     console.log(`${colors.magenta}🚀 Démarrage de HEXGATE V3...${colors.reset}`);
     
     const { state, saveCreds } = await useMultiFileAuthState("auth_info_baileys");
     const { version } = await fetchLatestBaileysVersion();
     
-    sock = makeWASocket({
+    const socketConfig = {
       version,
       logger: P({ level: logLevel }),
-      printQRInTerminal: false,
       auth: state,
       browser: Browsers.ubuntu("Chrome"),
       markOnlineOnConnect: alwaysOnline,
       syncFullHistory: false,
-    });
+    };
+    
+    // Configurer selon la méthode de connexion
+    if (USE_QR_CODE) {
+      socketConfig.printQRInTerminal = true;
+      console.log(`${colors.cyan}📱 Mode QR Code activé${colors.reset}`);
+    } else {
+      socketConfig.printQRInTerminal = false;
+      console.log(`${colors.cyan}📱 Mode Pairing Code activé${colors.reset}`);
+    }
+    
+    sock = makeWASocket(socketConfig);
 
     const commandHandler = new CommandHandler();
 
@@ -686,54 +689,38 @@ async function startBot() {
     sock.ev.on("connection.update", async (update) => {
       const { connection, lastDisconnect, qr } = update;
       
-      if (qr) {
-        console.log(`${colors.yellow}⚠️ QR Code détecté, utilisation du pairing...${colors.reset}`);
-        
-        const phoneNumber = await askForPhoneNumber();
-        if (!phoneNumber || phoneNumber.length < 9) {
-          console.log(`${colors.red}❌ Numéro invalide${colors.reset}`);
-          process.exit(1);
-        }
-
-        try {
-          const code = await sock.requestPairingCode(phoneNumber);
-          console.log(`${colors.green}✅ Code de pairing: ${code}${colors.reset}`);
-          console.log(`${colors.cyan}📱 Instructions:`);
-          console.log(`${colors.cyan}1. Ouvrez WhatsApp sur votre téléphone${colors.reset}`);
-          console.log(`${colors.cyan}2. Appuyez sur ⋮ (trois points)${colors.reset}`);
-          console.log(`${colors.cyan}3. Sélectionnez "Appareils liés"${colors.reset}`);
-          console.log(`${colors.cyan}4. Choisissez "Associer un appareil"${colors.reset}`);
-          console.log(`${colors.cyan}5. Entrez ce code: ${code}${colors.reset}`);
-          
-          await delay(3000);
-        } catch (pairError) {
-          console.log(`${colors.red}❌ Erreur pairing: ${pairError.message}${colors.reset}`);
-          
-          // Message d'erreur spécifique
-          if (pairError.message.includes("connect") || pairError.message.includes("device")) {
-            console.log(`${colors.red}❌ IMPOSSIBLE DE CONNECTER L'APPAREIL${colors.reset}`);
-            console.log(`${colors.yellow}⚠️ Vérifiez que:${colors.reset}`);
-            console.log(`${colors.yellow}  1. Le numéro est correct sur votre appareil${colors.reset}`);
-            console.log(`${colors.yellow}  2. WhatsApp est bien installé${colors.reset}`);
-            console.log(`${colors.yellow}  3. Vous avez une connexion Internet${colors.reset}`);
-          }
-          
-          process.exit(1);
-        }
+      // Stocker le QR code si disponible
+      if (qr && USE_QR_CODE) {
+        currentQR = qr;
+        console.log(`${colors.green}📱 QR Code généré${colors.reset}`);
+        console.log(`${colors.cyan}📱 Scannez le QR code avec WhatsApp${colors.reset}`);
       }
       
       if (connection === "close") {
         const reason = new Error(lastDisconnect?.error)?.output?.statusCode;
+        console.log(`${colors.red}❌ Déconnecté, code: ${reason}${colors.reset}`);
+        
         if (reason === DisconnectReason.loggedOut) {
-          console.log(`${colors.red}❌ Déconnecté, suppression des données d'authentification...${colors.reset}`);
-          exec("rm -rf auth_info_baileys", () => {
-            console.log(`${colors.yellow}🔄 Redémarrage du bot...${colors.reset}`);
-            startBot();
-          });
-        } else {
-          console.log(`${colors.yellow}🔄 Reconnexion...${colors.reset}`);
-          startBot();
+          console.log(`${colors.yellow}🗑️ Suppression des données d'authentification...${colors.reset}`);
+          try {
+            const fs = require('fs');
+            const path = require('path');
+            const authDir = path.join(__dirname, 'auth_info_baileys');
+            
+            if (fs.existsSync(authDir)) {
+              fs.rmSync(authDir, { recursive: true, force: true });
+              console.log(`${colors.green}✅ Données supprimées${colors.reset}`);
+            }
+          } catch (error) {
+            console.log(`${colors.yellow}⚠️ Erreur suppression données: ${error.message}${colors.reset}`);
+          }
         }
+        
+        console.log(`${colors.yellow}🔄 Reconnexion dans 5 secondes...${colors.reset}`);
+        setTimeout(() => {
+          startBot();
+        }, 5000);
+        
       } else if (connection === "open") {
         console.log(`${colors.green}✅ Connecté à WhatsApp!${colors.reset}`);
         console.log(`${colors.cyan}🔓 Mode: ${botPublic ? 'PUBLIC' : 'PRIVÉ'}${colors.reset}`);
@@ -741,10 +728,11 @@ async function startBot() {
         console.log(`${colors.cyan}🌐 Interface web: http://localhost:${WEB_PORT}${colors.reset}`);
         
         botReady = true;
+        currentQR = null; // Nettoyer le QR code
         
         // Envoyer confirmation au propriétaire
         try {
-          const confirmMessage = `✅ *HEX-GATE CONNECTÉ*\n\n🚀 *HEXGATE V3* est en ligne!\n📊 *Sessions:* 0/${MAX_SESSIONS}\n🌐 *Interface:* http://localhost:${WEB_PORT}\n🔧 *Mode:* ${botPublic ? 'PUBLIC' : 'PRIVÉ'}`;
+          const confirmMessage = `✅ *HEX-GATE CONNECTÉ*\n\n🚀 *HEXGATE V3* est en ligne!\n📊 *Sessions:* 0/${MAX_SESSIONS}\n🌐 *Interface:* http://localhost:${WEB_PORT}\n🔧 *Mode:* ${botPublic ? 'PUBLIC' : 'PRIVÉ'}\n📱 *Méthode:* ${USE_QR_CODE ? 'QR Code' : 'Pairing Code'}`;
           
           await sock.sendMessage(OWNER_NUMBER, { text: confirmMessage });
           console.log(`${colors.green}✅ Confirmation envoyée au propriétaire${colors.reset}`);
@@ -776,7 +764,7 @@ async function startBot() {
           }
           
           // Traitement des commandes
-          if (body.startsWith(prefix)) {
+          if (body && body.startsWith(prefix)) {
             const args = body.slice(prefix.length).trim().split(/ +/);
             const command = args.shift().toLowerCase();
             
@@ -797,54 +785,67 @@ async function startBot() {
       }
     });
 
-    // Interface console
-    rl.on("line", async (input) => {
-      const args = input.trim().split(/ +/);
-      const command = args.shift().toLowerCase();
+    // Interface console simple (sans readline qui cause des problèmes)
+    process.stdin.on('data', (input) => {
+      const text = input.toString().trim();
       
-      switch (command) {
-        case "sessions":
-          console.log(`${colors.cyan}📊 Sessions actives: ${activeSessions.size}/${MAX_SESSIONS}${colors.reset}`);
-          console.log(`${colors.yellow}📱 Numéros:${colors.reset}`);
-          activeSessions.forEach(num => {
-            console.log(`${colors.yellow}  • ${num}${colors.reset}`);
-          });
-          break;
-          
-        case "status":
-          console.log(`${colors.cyan}📊 STATUT DU BOT${colors.reset}`);
-          console.log(`${colors.yellow}• Connecté: ${botReady ? 'OUI' : 'NON'}${colors.reset}`);
-          console.log(`${colors.yellow}• Sessions: ${activeSessions.size}/${MAX_SESSIONS}${colors.reset}`);
-          console.log(`${colors.yellow}• Mode: ${botPublic ? 'PUBLIC' : 'PRIVÉ'}${colors.reset}`);
-          console.log(`${colors.yellow}• Port web: ${WEB_PORT}${colors.reset}`);
-          console.log(`${colors.yellow}• Prefix: "${prefix}"${colors.reset}`);
-          break;
-          
-        case "clear":
-          console.clear();
-          console.log(`${colors.magenta}🚀 HEXGATE V3 - Bot WhatsApp${colors.reset}`);
-          break;
-          
-        case "exit":
-          console.log(`${colors.yellow}👋 Arrêt du bot...${colors.reset}`);
-          rl.close();
-          process.exit(0);
-          break;
-          
-        default:
-          console.log(`${colors.yellow}⚠️ Commandes console:${colors.reset}`);
-          console.log(`${colors.cyan}  • sessions - Voir les sessions actives${colors.reset}`);
-          console.log(`${colors.cyan}  • status - Afficher le statut${colors.reset}`);
-          console.log(`${colors.cyan}  • clear - Nettoyer la console${colors.reset}`);
-          console.log(`${colors.cyan}  • exit - Quitter${colors.reset}`);
+      if (text === 'sessions') {
+        console.log(`${colors.cyan}📊 Sessions actives: ${activeSessions.size}/${MAX_SESSIONS}${colors.reset}`);
+        activeSessions.forEach(num => {
+          console.log(`${colors.yellow}  • ${num}${colors.reset}`);
+        });
+      } else if (text === 'status') {
+        console.log(`${colors.cyan}📊 STATUT DU BOT${colors.reset}`);
+        console.log(`${colors.yellow}• Connecté: ${botReady ? 'OUI' : 'NON'}${colors.reset}`);
+        console.log(`${colors.yellow}• Sessions: ${activeSessions.size}/${MAX_SESSIONS}${colors.reset}`);
+        console.log(`${colors.yellow}• Mode: ${botPublic ? 'PUBLIC' : 'PRIVÉ'}${colors.reset}`);
+        console.log(`${colors.yellow}• Port web: ${WEB_PORT}${colors.reset}`);
+        console.log(`${colors.yellow}• Prefix: "${prefix}"${colors.reset}`);
+        console.log(`${colors.yellow}• QR Code: ${USE_QR_CODE ? 'ACTIVÉ' : 'DÉSACTIVÉ'}${colors.reset}`);
+      } else if (text === 'clear') {
+        console.clear();
+        console.log(`${colors.magenta}🚀 HEXGATE V3 - Bot WhatsApp${colors.reset}`);
+      } else if (text === 'exit') {
+        console.log(`${colors.yellow}👋 Arrêt du bot...${colors.reset}`);
+        process.exit(0);
+      } else if (text) {
+        console.log(`${colors.yellow}⚠️ Commandes console: sessions, status, clear, exit${colors.reset}`);
       }
     });
 
+    console.log(`${colors.green}✅ Bot initialisé avec succès${colors.reset}`);
+    console.log(`${colors.cyan}📝 Attente de connexion WhatsApp...${colors.reset}`);
+
   } catch (error) {
     console.log(`${colors.red}❌ Erreur démarrage bot: ${error.message}${colors.reset}`);
-    process.exit(1);
+    
+    // Tentative de redémarrage après 10 secondes
+    console.log(`${colors.yellow}🔄 Nouvelle tentative dans 10 secondes...${colors.reset}`);
+    setTimeout(() => {
+      startBot();
+    }, 10000);
   }
 }
+
+// ==================== GESTION DES SIGNALS ====================
+process.on('SIGINT', () => {
+  console.log('\n' + `${colors.yellow}👋 Arrêt du bot...${colors.reset}`);
+  process.exit(0);
+});
+
+process.on('SIGTERM', () => {
+  console.log('\n' + `${colors.yellow}👋 Arrêt du bot...${colors.reset}`);
+  process.exit(0);
+});
+
+process.on('uncaughtException', (error) => {
+  console.log(`${colors.red}❌ Exception non capturée: ${error.message}${colors.reset}`);
+  console.error(error);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.log(`${colors.red}❌ Rejet non géré: ${reason}${colors.reset}`);
+});
 
 // ==================== DÉMARRAGE ====================
 startBot();
@@ -853,9 +854,10 @@ startBot();
 module.exports = {
   bot: sock,
   generatePairCode: async (phone) => {
-    if (!botReady || !sock) return null;
+    if (!botReady || !sock) {
+      throw new Error('Bot non connecté');
+    }
     
-    // Vérifier la limite
     if (activeSessions.size >= MAX_SESSIONS) {
       throw new Error(`Limite de ${MAX_SESSIONS} sessions atteinte`);
     }
@@ -866,7 +868,6 @@ module.exports = {
       if (code) {
         activeSessions.add(phone);
         
-        // Nettoyer après 5 minutes
         setTimeout(() => {
           activeSessions.delete(phone);
         }, 300000);
@@ -874,12 +875,13 @@ module.exports = {
         return code;
       }
       
-      return null;
+      throw new Error('Impossible de générer le code');
     } catch (error) {
       throw error;
     }
   },
   isBotReady: () => botReady,
   config,
-  activeSessionsCount: () => activeSessions.size
+  activeSessionsCount: () => activeSessions.size,
+  getActiveSessions: () => Array.from(activeSessions)
 };
