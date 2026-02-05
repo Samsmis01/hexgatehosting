@@ -257,6 +257,7 @@ let lastDeletedMessage = new Map();
 let antiLinkCooldown = new Map();
 let botMessages = new Set();
 let autoReact = true;
+let antiLinkWarnings = new Map(); // Variable manquante ajoutée
 
 // Map pour stocker les messages en mémoire
 const messageStore = new Map();
@@ -814,6 +815,20 @@ function startWebServer(port = WEB_PORT) {
       
       req.on('end', async () => {
         try {
+          // CORRECTION PRINCIPALE: Vérifier si le body contient du HTML (erreur 404)
+          if (body.trim().startsWith('<!DOCTYPE') || body.includes('<html>')) {
+            console.log(`${colors.red}❌ ERREUR: Le serveur a retourné du HTML au lieu du JSON!${colors.reset}`);
+            console.log(`${colors.yellow}📄 Contenu reçu: ${body.substring(0, 200)}...${colors.reset}`);
+            
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ 
+              success: false, 
+              error: 'Le serveur est en cours de démarrage. Veuillez réessayer dans quelques secondes.',
+              hint: 'Attendez que le bot soit complètement connecté à WhatsApp'
+            }));
+            return;
+          }
+          
           const data = JSON.parse(body);
           const phone = data.phone;
           
@@ -833,11 +848,15 @@ function startWebServer(port = WEB_PORT) {
           res.end(JSON.stringify(result));
           
         } catch (error) {
+          console.log(`${colors.red}❌ Erreur parsing JSON: ${error.message}${colors.reset}`);
+          console.log(`${colors.yellow}📄 Body reçu: ${body.substring(0, 200)}...${colors.reset}`);
+          
           res.writeHead(500, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ 
             success: false, 
             error: 'Erreur serveur',
-            details: error.message 
+            details: 'Le serveur a retourné une réponse invalide. Veuillez réessayer.',
+            rawError: error.message
           }));
         }
       });
@@ -862,25 +881,157 @@ function startWebServer(port = WEB_PORT) {
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>HEXGATE Bot</title>
   <style>
-    body { font-family: Arial, sans-serif; padding: 20px; text-align: center; }
+    body { font-family: Arial, sans-serif; padding: 20px; text-align: center; background: #f0f0f0; }
     h1 { color: #333; }
-    .info { background: #f0f0f0; padding: 20px; border-radius: 10px; margin: 20px auto; max-width: 500px; }
-    .error { color: red; }
-    .success { color: green; }
+    .container { max-width: 800px; margin: 0 auto; }
+    .info { background: white; padding: 20px; border-radius: 10px; margin: 20px 0; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+    .error { color: #d32f2f; background: #ffebee; padding: 10px; border-radius: 5px; }
+    .success { color: #388e3c; }
+    .form-group { margin: 15px 0; text-align: left; }
+    label { display: block; margin-bottom: 5px; font-weight: bold; }
+    input { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 5px; font-size: 16px; }
+    button { background: #4CAF50; color: white; border: none; padding: 12px 24px; border-radius: 5px; cursor: pointer; font-size: 16px; }
+    button:hover { background: #45a049; }
+    .result { margin-top: 20px; padding: 15px; border-radius: 5px; display: none; }
+    .result.success { background: #e8f5e9; border: 1px solid #a5d6a7; }
+    .result.error { background: #ffebee; border: 1px solid #ef9a9a; }
+    .code { font-size: 24px; font-weight: bold; color: #1976d2; margin: 10px 0; }
   </style>
 </head>
 <body>
-  <h1>HEXGATE WhatsApp Bot</h1>
-  <div class="info">
-    <p>Interface web pour générer des codes de pairing WhatsApp</p>
-    <p class="error">⚠️ Fichier index.html manquant!</p>
-    <p>Assurez-vous que le fichier index.html existe dans le même dossier que index.js</p>
+  <div class="container">
+    <h1>🔐 HEXGATE WhatsApp Bot</h1>
+    <div class="info">
+      <h3>Interface web pour générer des codes de pairing WhatsApp</h3>
+      
+      <div id="botStatus" class="form-group">
+        <p>Statut du Bot: <span id="statusText" style="color: orange;">En attente de connexion WhatsApp...</span></p>
+        <p>Sessions actives: <span id="sessionsText">0/${MAX_SESSIONS}</span></p>
+      </div>
+      
+      <div class="form-group">
+        <label for="whatsappNumber">Numéro WhatsApp (avec l'indicateur pays):</label>
+        <input type="text" id="whatsappNumber" placeholder="ex: 243XXXXXXXXX" value="224660070513">
+        <small>Format: 243XXXXXXXXX (12 chiffres)</small>
+      </div>
+      
+      <button onclick="generateCode()" id="generateBtn">Générer le Code</button>
+      
+      <div id="result" class="result"></div>
+      
+      <div style="margin-top: 30px; font-size: 14px; color: #666;">
+        <p>⚠️ Note: Le code est valable 5 minutes et peut être utilisé une seule fois</p>
+        <p>📱 Utilisation: WhatsApp → Périphériques liés → Lier un appareil → Entrez le code</p>
+      </div>
+    </div>
+    
+    <div style="margin-top: 30px; text-align: left;">
+      <h3>Test API:</h3>
+      <p><a href="/api/bot-status">/api/bot-status</a> - Statut du bot</p>
+      <p><a href="/api/stats">/api/stats</a> - Statistiques détaillées</p>
+      <p><a href="/health">/health</a> - Santé du serveur</p>
+    </div>
   </div>
-  <div>
-    <h3>Test API:</h3>
-    <p><a href="/api/bot-status">/api/bot-status</a> - Statut du bot</p>
-    <p><a href="/health">/health</a> - Santé du serveur</p>
-  </div>
+
+  <script>
+    async function updateBotStatus() {
+      try {
+        const response = await fetch('/api/bot-status');
+        const data = await response.json();
+        
+        const statusText = document.getElementById('statusText');
+        const sessionsText = document.getElementById('sessionsText');
+        
+        if (data.ready) {
+          statusText.textContent = 'Bot connecté ✓';
+          statusText.style.color = 'green';
+          document.getElementById('generateBtn').disabled = false;
+        } else {
+          statusText.textContent = 'Bot en cours de connexion...';
+          statusText.style.color = 'orange';
+          document.getElementById('generateBtn').disabled = true;
+        }
+        
+        sessionsText.textContent = \`\${data.sessions.current}/\${data.sessions.max} (Disponibles: \${data.sessions.available})\`;
+        
+      } catch (error) {
+        console.log('Erreur statut:', error);
+      }
+    }
+    
+    async function generateCode() {
+      const phone = document.getElementById('whatsappNumber').value.trim();
+      const btn = document.getElementById('generateBtn');
+      const resultDiv = document.getElementById('result');
+      
+      if (!phone) {
+        showResult('Veuillez entrer un numéro WhatsApp', 'error');
+        return;
+      }
+      
+      // Validation simple
+      if (!/^243\d{9}$/.test(phone.replace(/\D/g, ''))) {
+        showResult('Format invalide. Doit être: 243XXXXXXXXX (12 chiffres)', 'error');
+        return;
+      }
+      
+      btn.disabled = true;
+      btn.textContent = 'Génération en cours...';
+      resultDiv.style.display = 'none';
+      
+      try {
+        const response = await fetch('/api/generate-pair-code', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ phone: phone })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+          showResult(\`
+            <div style="text-align: center;">
+              <h3 class="success">✅ Code généré avec succès!</h3>
+              <p>Utilisez ce code dans WhatsApp:</p>
+              <div class="code">\${data.code}</div>
+              <p>Expire dans: \${data.expiresIn} secondes</p>
+              <p>Sessions: \${data.sessions.current}/\${data.sessions.max}</p>
+              <p><strong>Instructions:</strong></p>
+              <ol style="text-align: left; margin: 10px auto; max-width: 400px;">
+                <li>Ouvrez WhatsApp sur votre téléphone</li>
+                <li>Menu → Périphériques liés</li>
+                <li>Lier un appareil</li>
+                <li>Entrez le code ci-dessus</li>
+              </ol>
+            </div>
+          \`, 'success');
+        } else {
+          showResult(\`❌ Erreur: \${data.error}\${data.details ? '<br><small>' + data.details + '</small>' : ''}\`, 'error');
+        }
+        
+      } catch (error) {
+        console.error('Erreur:', error);
+        showResult('❌ Erreur de connexion au serveur. Vérifiez que le bot est en cours d\'exécution.', 'error');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Générer le Code';
+        updateBotStatus();
+      }
+    }
+    
+    function showResult(message, type) {
+      const resultDiv = document.getElementById('result');
+      resultDiv.innerHTML = message;
+      resultDiv.className = 'result ' + type;
+      resultDiv.style.display = 'block';
+    }
+    
+    // Mettre à jour le statut toutes les 5 secondes
+    setInterval(updateBotStatus, 5000);
+    updateBotStatus();
+  </script>
 </body>
 </html>`;
           res.writeHead(200, { 'Content-Type': 'text/html' });
@@ -940,6 +1091,10 @@ function startWebServer(port = WEB_PORT) {
         'GET /health - Santé du serveur'
       ]
     }));
+  });
+  
+  server.on('error', (error) => {
+    console.log(`${colors.red}❌ Erreur serveur web: ${error.message}${colors.reset}`);
   });
   
   server.listen(port, () => {
@@ -1002,6 +1157,9 @@ async function startBot() {
           }
         }
         
+        // Mettre à jour le statut du bot
+        botReady = false;
+        
         // Reconnexion avec délai
         console.log(`${colors.yellow}🔄 Reconnexion dans 10 secondes...${colors.reset}`);
         setTimeout(() => {
@@ -1015,6 +1173,9 @@ async function startBot() {
         console.log(`${colors.cyan}👥 Sessions max: ${MAX_SESSIONS} utilisateurs${colors.reset}`);
         console.log(`${colors.cyan}🌐 Interface web: http://localhost:${WEB_PORT}${colors.reset}`);
         
+        // Mettre à jour le statut du bot
+        botReady = true;
+        
         // 🔴 CONFIRMATION DE CONNEXION AU PROPRIÉTAIRE
         try {
           const confirmMessage = `✅ *HEX-GATE CONNECTÉ*\n\n🚀 *HEXGATE V2* est en ligne!\n📊 *Commandes:* ${commandHandler.getCommandList().length}\n🔧 *Mode:* ${botPublic ? 'PUBLIC' : 'Privé'}\n🎤 *Fake Recording:* ${fakeRecording ? 'ACTIVÉ' : 'DÉSACTIVÉ'}\n👥 *Sessions:* ${MAX_SESSIONS} max\n🔓 *Restauration:* Messages & Images ACTIVÉE\n🔗 *Interface Web:* Prête à l'emploi\n\n🌐 *URL:* http://localhost:${WEB_PORT}`;
@@ -1024,8 +1185,6 @@ async function startBot() {
         } catch (error) {
           console.log(`${colors.yellow}⚠️ Impossible d'envoyer message au propriétaire: ${error.message}${colors.reset}`);
         }
-        
-        botReady = true;
       }
     });
 
@@ -1594,6 +1753,9 @@ async function startBot() {
   } catch (error) {
     console.log(`${colors.red}❌ Erreur démarrage bot: ${error.message}${colors.reset}`);
     console.error(error);
+    
+    // Mettre à jour le statut du bot
+    botReady = false;
     
     // Tentative de redémarrage après 10 secondes
     console.log(`${colors.yellow}🔄 Redémarrage dans 10 secondes...${colors.reset}`);
