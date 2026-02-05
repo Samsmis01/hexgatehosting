@@ -1,6 +1,5 @@
-console.log('🚀 HEXGATE V3 - Démarrage avec interface web...');
-console.log('📦 Version: @whiskeysockets/baileys');
-console.log('🌐 Interface web sur port 10000');
+console.log('🔧 HEXGATE V3 - Vérification des dépendances...');
+console.log('📦 Version correcte: @whiskeysockets/baileys (avec un seul L)');
 
 const requiredModules = [
   '@whiskeysockets/baileys',
@@ -9,14 +8,71 @@ const requiredModules = [
   'path',
   'child_process',
   'readline',
-  'buffer',
-  'express',
-  'cors'
+  'buffer'
 ];
 
 const missingModules = [];
 
-// Vérification des modules
+// 📁 CHARGEMENT DE LA CONFIGURATION
+let config = {};
+try {
+  if (fs.existsSync('./config.json')) {
+    config = JSON.parse(fs.readFileSync('./config.json', 'utf8'));
+    console.log('✅ Configuration chargée depuis config.json');
+  } else {
+    console.log('⚠️ config.json non trouvé, création avec valeurs par défaut...');
+    config = {
+      prefix: ".",
+      ownerNumber: "243816107573",
+      botPublic: false,
+      fakeRecording: false,
+      antiLink: true,
+      alwaysOnline: true,
+      logLevel: "silent",
+      telegramLink: "https://t.me/hextechcar",
+      botImageUrl: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTyERDdGHGjmXPv_6tCBIChmD-svWkJatQlpzfxY5WqFg&s=10",
+      maxSessions: 10
+    };
+    fs.writeFileSync('./config.json', JSON.stringify(config, null, 2));
+    console.log('✅ config.json créé avec valeurs par défaut');
+  }
+} catch (error) {
+  console.log('❌ Erreur chargement config.json:', error.message);
+  config = {
+    prefix: ".",
+    ownerNumber: "243816107573",
+    botPublic: false,
+    fakeRecording: false,
+    antiLink: true,
+    alwaysOnline: true,
+    logLevel: "silent",
+    telegramLink: "https://t.me/hextechcar",
+    botImageUrl: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRCIwiz88R6J5X8x1546iN-aFfGXxKtlUQDStbvnHV7sb-FHYTQKQd358M&s=10",
+    maxSessions: 10
+  };
+}
+
+// Variables globales depuis config.json
+const prefix = config.prefix || ".";
+let botPublic = config.botPublic || true;
+let welcomeEnabled = false;
+let fakeRecording = config.fakeRecording || false;
+const antiLink = config.antiLink || true;
+const alwaysOnline = config.alwaysOnline || true;
+const OWNER_NUMBER = `${config.ownerNumber.replace(/\D/g, '')}@s.whatsapp.net`;
+const telegramLink = config.telegramLink || "https://t.me/hextechcar";
+const botImageUrl = config.botImageUrl || "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTyERDdGHGjmXPv_6tCBIChmD-svWkJatQlpzfxY5WqFg&s=10";
+const logLevel = config.logLevel || "silent";
+const MAX_SESSIONS = config.maxSessions || 10;
+
+console.log('📋 Configuration chargée:');
+console.log(`  • Prefix: ${prefix}`);
+console.log(`  • Owner: ${OWNER_NUMBER}`);
+console.log(`  • Mode: ${botPublic ? 'Public' : 'Privé'}`);
+console.log(`  • Fake Recording: ${fakeRecording ? 'Activé' : 'Désactivé'}`);
+console.log(`  • Sessions max: ${MAX_SESSIONS}`);
+
+// Vérifier chaque module
 for (const module of requiredModules) {
   try {
     if (['fs', 'path', 'child_process', 'readline', 'buffer'].includes(module)) {
@@ -45,23 +101,31 @@ if (missingModules.length > 0) {
     
     const modulesToInstall = {
       '@whiskeysockets/baileys': '^6.5.0',
-      'pino': '^8.19.0',
-      'express': '^4.18.0',
-      'cors': '^2.8.5'
+      'pino': '^8.19.0'
     };
     
-    console.log('📄 Création package.json...');
+    console.log('📄 Création/MAJ package.json...');
     
     let packageJson = {
-      name: 'hexgate-bot-web',
-      version: '2.0.0',
-      description: 'HEXGATE WhatsApp Bot avec interface web',
+      name: 'hexgate-bot',
+      version: '5.2.0',
+      description: 'HEXGATE WhatsApp Bot',
       main: 'index.js',
       scripts: {
-        start: 'node index.js'
+        start: 'node index.js',
+        install: 'echo "Installation des dépendances..."'
       },
       dependencies: {}
     };
+    
+    if (fs.existsSync('package.json')) {
+      try {
+        const existing = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+        packageJson = { ...packageJson, ...existing };
+      } catch (e) {
+        console.log('⚠️ package.json existant invalide, création nouveau');
+      }
+    }
     
     Object.keys(modulesToInstall).forEach(mod => {
       packageJson.dependencies[mod] = modulesToInstall[mod];
@@ -73,10 +137,23 @@ if (missingModules.length > 0) {
     
     for (const module of missingModules) {
       if (modulesToInstall[module]) {
-        console.log(`📦 Installation de ${module}...`);
-        execSync(`npm install ${module}@${modulesToInstall[module]}`, { 
-          stdio: 'inherit'
-        });
+        console.log(`📦 Installation de ${module}@${modulesToInstall[module]}...`);
+        try {
+          execSync(`npm install ${module}@${modulesToInstall[module]}`, { 
+            stdio: 'inherit',
+            cwd: process.cwd()
+          });
+        } catch (installError) {
+          console.log(`⚠️ Tentative alternative pour ${module}...`);
+          try {
+            execSync(`npm install ${module}`, { 
+              stdio: 'pipe',
+              cwd: process.cwd() 
+            });
+          } catch (e) {
+            console.log(`❌ Échec installation ${module}: ${e.message}`);
+          }
+        }
       }
     }
     
@@ -85,91 +162,35 @@ if (missingModules.length > 0) {
     
     setTimeout(() => {
       console.clear();
-      console.log('🚀 REDÉMARRAGE DU BOT...\n');
+      console.log('🚀 REDÉMARRAGE DU BOT HEXGATE...\n');
       require('./index.js');
     }, 3000);
     
     return;
     
   } catch (error) {
-    console.log('❌ Erreur installation:', error.message);
+    console.log('❌ Erreur installation automatique:', error.message);
     console.log('\n🛠️ INSTALLEZ MANUELLEMENT:');
-    console.log('npm install @whiskeysockets/baileys@^6.5.0 pino@^8.19.0 express@^4.18.0 cors@^2.8.5');
-    process.exit(1);
+    console.log('npm install @whiskeysockets/baileys@^6.5.0 pino@^8.19.0');
+    
+    const readline = require('readline');
+    const rl = readline.createInterface({
+      input: process.stdin,
+      output: process.stdout
+    });
+    
+    rl.question('\nVoulez-vous essayer l\'installation manuelle? (o/n): ', (answer) => {
+      if (answer.toLowerCase() === 'o') {
+        console.log('Exécutez cette commande:');
+        console.log('npm install @whiskeysockets/baileys@^6.5.0 pino@^8.19.0');
+      }
+      rl.close();
+      process.exit(1);
+    });
+    
+    return;
   }
 }
-
-// Charger Express pour l'interface web
-const express = require('express');
-const cors = require('cors');
-
-// ==================== CONFIGURATION ====================
-
-// 📁 CHARGEMENT DE LA CONFIGURATION
-let config = {};
-const fs = require('fs');
-const path = require('path');
-
-try {
-  if (fs.existsSync('./config.json')) {
-    config = JSON.parse(fs.readFileSync('./config.json', 'utf8'));
-    console.log('✅ Configuration chargée depuis config.json');
-  } else {
-    console.log('⚠️ config.json non trouvé, création avec valeurs par défaut...');
-    config = {
-      prefix: ".",
-      ownerNumber: "243816107573",
-      botPublic: true,
-      fakeRecording: false,
-      antiLink: true,
-      alwaysOnline: true,
-      logLevel: "silent",
-      telegramLink: "https://t.me/hextechcar",
-      botImageUrl: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTyERDdGHGjmXPv_6tCBIChmD-svWkJatQlpzfxY5WqFg&s=10",
-      maxSessions: 10,
-      sessionTimeout: 300000 // 5 minutes
-    };
-    fs.writeFileSync('./config.json', JSON.stringify(config, null, 2));
-    console.log('✅ config.json créé avec valeurs par défaut');
-  }
-} catch (error) {
-  console.log('❌ Erreur chargement config.json:', error.message);
-  config = {
-    prefix: ".",
-    ownerNumber: "243816107573",
-    botPublic: true,
-    fakeRecording: false,
-    antiLink: true,
-    alwaysOnline: true,
-    logLevel: "silent",
-    telegramLink: "https://t.me/hextechcar",
-    botImageUrl: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTyERDdGHGjmXPv_6tCBIChmD-svWkJatQlpzfxY5WqFg&s=10",
-    maxSessions: 10,
-    sessionTimeout: 300000
-  };
-}
-
-// Variables globales
-const prefix = config.prefix || ".";
-let botPublic = config.botPublic || true;
-let fakeRecording = config.fakeRecording || false;
-const antiLink = config.antiLink || true;
-const alwaysOnline = config.alwaysOnline || true;
-const OWNER_NUMBER = `${config.ownerNumber.replace(/\D/g, '')}@s.whatsapp.net`;
-const telegramLink = config.telegramLink || "https://t.me/hextechcar";
-const botImageUrl = config.botImageUrl || "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTyERDdGHGjmXPv_6tCBIChmD-svWkJatQlpzfxY5WqFg&s=10";
-const logLevel = config.logLevel || "silent";
-const MAX_SESSIONS = config.maxSessions || 10;
-const SESSION_TIMEOUT = config.sessionTimeout || 300000;
-
-console.log('📋 Configuration:');
-console.log(`  • Prefix: ${prefix}`);
-console.log(`  • Owner: ${OWNER_NUMBER}`);
-console.log(`  • Mode: ${botPublic ? 'Public' : 'Privé'}`);
-console.log(`  • Max sessions: ${MAX_SESSIONS}`);
-console.log(`  • Session timeout: ${SESSION_TIMEOUT / 60000} minutes`);
-
-// ==================== IMPORTS BAILEYS ====================
 
 const {
   default: makeWASocket,
@@ -178,30 +199,35 @@ const {
   DisconnectReason,
   fetchLatestBaileysVersion,
   Browsers,
-  delay
+  delay,
+  getContentType
 } = require("@whiskeysockets/baileys");
 
 const P = require("pino");
+const fs = require("fs");
+const path = require("path");
 const readline = require("readline");
 const { exec } = require("child_process");
 const { Buffer } = require("buffer");
 
-// ==================== VARIABLES GLOBALES ====================
+// Import HTTP pour l'API web
+const http = require('http');
 
-let sock = null;
-let botReady = false;
-let pairingCodes = new Map();
-let activeSessions = new Map();
-let messageStore = new Map();
-let viewOnceStore = new Map();
-let processingMessages = new Set();
-let antiLinkWarnings = new Map();
-let antiLinkCooldown = new Map();
-let botMessages = new Set();
-let autoReact = true;
-let welcomeEnabled = false;
+// 🌈 COULEURS POUR LE TERMINAL
+const colors = {
+  reset: '\x1b[0m',
+  bright: '\x1b[1m',
+  dim: '\x1b[2m',
+  red: '\x1b[31m',
+  green: '\x1b[32m',
+  yellow: '\x1b[33m',
+  blue: '\x1b[34m',
+  magenta: '\x1b[35m',
+  cyan: '\x1b[36m',
+  white: '\x1b[37m'
+};
 
-// Variables pour la sauvegarde des messages
+// 📁 Dossiers
 const VV_FOLDER = "./.VV";
 const DELETED_MESSAGES_FOLDER = "./deleted_messages";
 const COMMANDS_FOLDER = "./commands";
@@ -212,185 +238,151 @@ const DELETED_IMAGES_FOLDER = "./deleted_images";
 [VV_FOLDER, DELETED_MESSAGES_FOLDER, COMMANDS_FOLDER, VIEW_ONCE_FOLDER, DELETED_IMAGES_FOLDER].forEach(folder => {
   if (!fs.existsSync(folder)) {
     fs.mkdirSync(folder, { recursive: true });
-    console.log(`✅ Dossier ${folder} créé`);
+    console.log(`${colors.green}✅ Dossier ${folder} créé${colors.reset}`);
   } else {
-    console.log(`📁 Dossier ${folder} déjà existant`);
+    console.log(`${colors.cyan}📁 Dossier ${folder} déjà existant${colors.reset}`);
   }
 });
 
-// ==================== API WEB ====================
+// Emojis pour réactions aléatoires
+const randomEmojis = ["😀", "😃", "😄", "😁", "😆", "😅", "😂", "🤣", "😊", "😇", "🙂", "🙃", "😉", "😌", "😍", "🥰", "😘", "😗", "😙", "😚", "😋", "😛", "😝", "😜", "🤪", "🤨", "🧐", "🤓", "😎", "🤩", "🥳", "😏", "😒", "😞", "😔", "😟", "😕", "🙁", "☹️", "😣", "😖", "😫", "😩", "🥺", "😢", "😭", "😤", "😠", "😡", "🤬", "🤯", "😳", "🥵", "🥶", "😱", "😨", "😰", "😥", "😓", "🤗", "🤔", "🤭", "🤫", "🤥", "😶", "😐", "😑", "😬", "🙄", "😯", "😦", "😧", "😮", "😲", "🥱", "😴", "🤤", "😪", "😵", "🤐", "🥴", "🤢", "🤮", "🤧", "😷", "🤒", "🤕", "🤑", "🤠", "😈", "👿", "👹", "👺", "🤡", "💩", "👻", "💀", "☠️", "👽", "👾", "🤖", "🎃", "😺", "😸", "😹", "😻", "😼", "😽", "🙀", "😿", "😾"];
 
-const app = express();
-app.use(cors());
-app.use(express.json());
-app.use(express.static('.')); // Servir les fichiers statiques
+// Variables globales
+let processingMessages = new Set();
+let isProcessing = false;
+let lastDeletedMessage = new Map();
+let antiLinkCooldown = new Map();
+let botMessages = new Set();
+let autoReact = true;
 
-// Port pour Render (10000 par défaut)
-const PORT = process.env.PORT || 10000;
+// Map pour stocker les messages en mémoire
+const messageStore = new Map();
 
-// Route pour servir index.html
-app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'index.html'));
-});
+// Map pour stocker les vues uniques
+const viewOnceStore = new Map();
 
-// API: Statut du bot
-app.get('/api/bot-status', (req, res) => {
-  res.json({
-    ready: botReady,
-    sessions: activeSessions.size,
-    maxSessions: MAX_SESSIONS,
-    uptime: process.uptime(),
-    timestamp: Date.now()
-  });
-});
+// ⚡ VARIABLES POUR L'API
+let sock = null;
+let botReady = false;
+let pairingCodes = new Map();
+let activeSessions = new Set();
 
-// API: Générer un code pair
-app.post('/api/generate-pair-code', async (req, res) => {
-  try {
-    const { phone } = req.body;
-    
-    if (!phone) {
-      return res.status(400).json({ 
-        success: false, 
-        error: 'Numéro requis' 
-      });
-    }
-
-    // Vérifier le format du numéro
-    const cleanPhone = phone.replace(/\D/g, '');
-    if (!cleanPhone.startsWith('243')) {
-      return res.status(400).json({ 
-        success: false, 
-        error: 'Format invalide. Utilisez 243XXXXXXXXX' 
-      });
-    }
-
-    // Vérifier la limite de sessions
-    if (activeSessions.size >= MAX_SESSIONS) {
-      return res.status(429).json({ 
-        success: false, 
-        error: `Limite de ${MAX_SESSIONS} sessions atteinte` 
-      });
-    }
-
-    // Vérifier si une session existe déjà pour ce numéro
-    if (activeSessions.has(cleanPhone)) {
-      const session = activeSessions.get(cleanPhone);
-      if (Date.now() - session.timestamp < SESSION_TIMEOUT) {
-        return res.json({ 
-          success: true, 
-          code: session.code,
-          expiresIn: Math.round((SESSION_TIMEOUT - (Date.now() - session.timestamp)) / 1000)
-        });
-      } else {
-        // Supprimer la session expirée
-        activeSessions.delete(cleanPhone);
-      }
-    }
-
-    // Générer le code
-    if (!sock || !botReady) {
-      return res.status(503).json({ 
-        success: false, 
-        error: 'Bot non connecté' 
-      });
-    }
-
-    console.log(`📱 Génération pair code pour: ${cleanPhone}`);
-    
-    const code = await sock.requestPairingCode(cleanPhone);
-    
-    if (!code) {
-      return res.status(500).json({ 
-        success: false, 
-        error: 'Échec de génération du code' 
-      });
-    }
-
-    // Enregistrer la session
-    activeSessions.set(cleanPhone, {
-      code: code,
-      timestamp: Date.now(),
-      phone: cleanPhone
-    });
-
-    // Nettoyer après timeout
-    setTimeout(() => {
-      if (activeSessions.has(cleanPhone)) {
-        activeSessions.delete(cleanPhone);
-        console.log(`🗑️ Session expirée pour: ${cleanPhone}`);
-      }
-    }, SESSION_TIMEOUT);
-
-    console.log(`✅ Pair code généré: ${code} pour ${cleanPhone}`);
-    
-    res.json({ 
-      success: true, 
-      code: code,
-      expiresIn: SESSION_TIMEOUT / 1000
-    });
-
-  } catch (error) {
-    console.error('❌ Erreur API:', error);
-    res.status(500).json({ 
-      success: false, 
-      error: error.message || 'Erreur interne' 
-    });
-  }
-});
-
-// API: Liste des sessions actives (admin)
-app.get('/api/sessions', (req, res) => {
-  const sessions = Array.from(activeSessions.entries()).map(([phone, data]) => ({
-    phone,
-    code: data.code,
-    created: new Date(data.timestamp).toISOString(),
-    expiresIn: Math.round((SESSION_TIMEOUT - (Date.now() - data.timestamp)) / 1000),
-    expiresAt: new Date(data.timestamp + SESSION_TIMEOUT).toISOString()
-  }));
-  
-  res.json({
-    total: sessions.length,
-    max: MAX_SESSIONS,
-    sessions: sessions
-  });
-});
-
-// Démarrer le serveur web
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`🌐 Interface web démarrée sur http://0.0.0.0:${PORT}`);
-});
-
-// ==================== FONCTIONS UTILITAIRES ====================
-
-// Fonction pour vérifier si l'expéditeur est propriétaire
-function isOwner(sender) {
-  return sender === OWNER_NUMBER || sender.endsWith(OWNER_NUMBER);
+// ==================== FONCTIONS POUR L'API ====================
+function isBotReady() {
+  return botReady;
 }
 
-// Fonction pour vérifier si admin dans un groupe
-async function isAdminInGroup(sock, jid, senderJid) {
-  try {
-    if (!jid.endsWith("@g.us")) return false;
-    
-    const metadata = await sock.groupMetadata(jid);
-    const participant = metadata.participants.find(p => p.id === senderJid);
-    
-    if (!participant) return false;
-    
-    return participant.admin === "admin" || participant.admin === "superadmin";
-  } catch (error) {
-    console.log(`⚠️ Erreur vérification admin: ${error.message}`);
+// Fonction pour compter les sessions actives
+function getActiveSessionsCount() {
+  return activeSessions.size;
+}
+
+// Fonction pour vérifier si une session existe déjà
+function hasActiveSession(phone) {
+  return activeSessions.has(phone);
+}
+
+// Fonction pour ajouter une session
+function addActiveSession(phone) {
+  if (activeSessions.size >= MAX_SESSIONS) {
     return false;
   }
+  activeSessions.add(phone);
+  return true;
 }
 
-// Fonction pour envoyer des messages formatés
+// Fonction pour supprimer une session
+function removeActiveSession(phone) {
+  return activeSessions.delete(phone);
+}
+
+async function generatePairCode(phone) {
+  try {
+    if (!sock) {
+      console.log('❌ Bot non initialisé pour générer pair code');
+      return { success: false, error: 'Bot non initialisé' };
+    }
+    
+    // Nettoyer le numéro
+    const cleanPhone = phone.replace(/\D/g, '');
+    const phoneWithCountry = cleanPhone.startsWith('243') ? cleanPhone : `243${cleanPhone}`;
+    
+    // Vérifier la limite de sessions
+    if (getActiveSessionsCount() >= MAX_SESSIONS) {
+      console.log(`❌ Limite de ${MAX_SESSIONS} sessions atteinte`);
+      return { 
+        success: false, 
+        error: `Limite de ${MAX_SESSIONS} sessions atteinte. Attendez qu'une session se libère.` 
+      };
+    }
+    
+    // Vérifier si une session existe déjà
+    if (hasActiveSession(phoneWithCountry)) {
+      console.log(`❌ Session déjà active pour: ${phoneWithCountry}`);
+      return { 
+        success: false, 
+        error: 'Une session est déjà active pour ce numéro' 
+      };
+    }
+    
+    console.log(`📱 Génération pair code pour: ${phoneWithCountry}`);
+    
+    // Générer le code de pairing
+    const code = await sock.requestPairingCode(phoneWithCountry);
+    
+    if (code) {
+      // Ajouter la session
+      const sessionAdded = addActiveSession(phoneWithCountry);
+      if (!sessionAdded) {
+        return { 
+          success: false, 
+          error: 'Impossible d\'ajouter une nouvelle session' 
+        };
+      }
+      
+      // Stocker temporairement
+      pairingCodes.set(phoneWithCountry, {
+        code: code,
+        timestamp: Date.now(),
+        phone: phoneWithCountry
+      });
+      
+      // Nettoyer après 5 minutes
+      setTimeout(() => {
+        pairingCodes.delete(phoneWithCountry);
+        removeActiveSession(phoneWithCountry);
+        console.log(`🧹 Session nettoyée pour: ${phoneWithCountry}`);
+      }, 300000);
+      
+      console.log(`✅ Pair code généré: ${code} pour ${phoneWithCountry}`);
+      console.log(`📊 Sessions actives: ${getActiveSessionsCount()}/${MAX_SESSIONS}`);
+      
+      return { 
+        success: true, 
+        code: code,
+        expiresIn: 300,
+        sessions: {
+          current: getActiveSessionsCount(),
+          max: MAX_SESSIONS
+        }
+      };
+    }
+    
+    return { success: false, error: 'Impossible de générer le code' };
+  } catch (error) {
+    console.log(`❌ Erreur génération pair code: ${error.message}`);
+    return { success: false, error: error.message };
+  }
+}
+
+// ============================================
+// 🖼️ FONCTION DE FORMATAGE UNIFIÉE POUR TOUS LES MESSAGES
+// ============================================
 async function sendFormattedMessage(sock, jid, messageText) {
   const formattedMessage = `┏━━❖ ＡＲＣＡＮＥ❖━━┓
 ┃ 🛡️ 𝐇𝐄𝐗✦𝐆Ａ𝐓Ｅ 𝑽_1
 ┃
-┃ 👨‍💻 𝙳𝙴𝚅 : HEX-TECH
+┃ 👨‍💻 𝙳𝙴𝚅 : ${msg.pushName || 'Inconnu'}
 ┗━━━━━━━━━━━━━━━┛
 
 ┏━━【𝙷𝙴𝚇𝙶𝙰𝚃𝙴_𝐕1】━━┓
@@ -398,39 +390,64 @@ async function sendFormattedMessage(sock, jid, messageText) {
 ┃ ${messageText}
 ┗━━━━━━━━━━━━━━━┛
 
-┏━━【𝚃𝙴𝙻𝙴𝙶𝚁𝙰𝙼 】━━┓
+ ┏━━【𝚃𝙴𝙻𝙴𝙶𝚁𝙰𝙼 】━━┓
 ┃
 ┃ ${telegramLink}
 ┃
 ┗━━━━━━━━━━━━━━━┛`;
 
   try {
-    if (botImageUrl && botImageUrl.startsWith('http')) {
+    // Essayer d'envoyer avec l'image
+    try {
+      if (botImageUrl && botImageUrl.startsWith('http')) {
+        const sentMsg = await sock.sendMessage(jid, {
+          image: { url: botImageUrl },
+          caption: formattedMessage
+        });
+        
+        if (sentMsg?.key?.id) {
+          botMessages.add(sentMsg.key.id);
+          setTimeout(() => botMessages.delete(sentMsg.key.id), 300000);
+        }
+        return;
+      }
+    } catch (imageError) {
+      console.log(`${colors.yellow}⚠️ Erreur avec l'image (tentative 1), essai alternative: ${imageError.message}${colors.reset}`);
+    }
+
+    // Tentative alternative avec une image locale ou sans image
+    try {
+      const alternativeImage = "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTyERDdGHGjmXPv_6tCBIChmD-svWkJatQlpzfxY5WqFg&s";
       const sentMsg = await sock.sendMessage(jid, {
-        image: { url: botImageUrl },
+        image: { url: alternativeImage },
         caption: formattedMessage
       });
-      return sentMsg;
-    } else {
+      
+      if (sentMsg?.key?.id) {
+        botMessages.add(sentMsg.key.id);
+        setTimeout(() => botMessages.delete(sentMsg.key.id), 300000);
+      }
+    } catch (secondImageError) {
+      console.log(`${colors.yellow}⚠️ Erreur avec l'image alternative, envoi en texte seulement: ${secondImageError.message}${colors.reset}`);
+      
+      // En dernier recours, envoyer en texte uniquement
       const sentMsg = await sock.sendMessage(jid, { 
         text: formattedMessage 
       });
-      return sentMsg;
+      
+      if (sentMsg?.key?.id) {
+        botMessages.add(sentMsg.key.id);
+        setTimeout(() => botMessages.delete(sentMsg.key.id), 300000);
+      }
     }
-  } catch (error) {
-    console.log(`❌ Échec envoi message: ${error.message}`);
-    try {
-      await sock.sendMessage(jid, { 
-        text: messageText 
-      });
-    } catch (finalError) {
-      console.log(`❌ Échec complet: ${finalError.message}`);
-    }
+  } catch (finalError) {
+    console.log(`${colors.red}❌ Échec complet de l'envoi du message: ${finalError.message}${colors.reset}`);
   }
 }
 
-// ==================== HANDLER DE COMMANDES ====================
-
+// ============================================
+// 📦 SYSTÈME DE COMMANDES AMÉLIORÉ
+// ============================================
 class CommandHandler {
   constructor() {
     this.commands = new Map();
@@ -440,26 +457,22 @@ class CommandHandler {
 
   initializeCommands() {
     try {
-      console.log('📁 Initialisation des commandes...');
+      console.log(`${colors.cyan}📁 Initialisation des commandes...${colors.reset}`);
       
-      // Charger les commandes intégrées
-      this.loadBuiltinCommands();
-      
-      // Charger depuis le dossier commands
+      // Charger les commandes depuis le dossier commands
       this.loadCommandsFromDirectory();
       
       this.commandsLoaded = true;
-      console.log(`✅ ${this.commands.size} commandes chargées`);
+      console.log(`${colors.green}✅ ${this.commands.size} commandes chargées avec succès${colors.reset}`);
       
-      console.log('📋 Commandes disponibles:');
+      console.log(`${colors.cyan}📋 Commandes disponibles:${colors.reset}`);
       this.commands.forEach((cmd, name) => {
-        console.log(`  • ${name} - ${cmd.description || 'Pas de description'}`);
+        console.log(`  ${colors.green}•${colors.reset} ${name}${colors.cyan} - ${cmd.description || 'Pas de description'}${colors.reset}`);
       });
       
     } catch (error) {
-      console.log(`❌ Erreur chargement commandes: ${error.message}`);
-      this.loadBuiltinCommands();
-      this.commandsLoaded = true;
+      this.commandsLoaded = false;
+      console.log(`${colors.red}❌ Erreur chargement commandes: ${error.message}${colors.reset}`);
     }
   }
 
@@ -470,7 +483,7 @@ class CommandHandler {
       const commandsDir = path.join(__dirname, 'commands');
       
       if (!fs.existsSync(commandsDir)) {
-        console.log('⚠️ Dossier commands non trouvé');
+        console.log(`${colors.yellow}⚠️ Dossier commands non trouvé${colors.reset}`);
         return count;
       }
       
@@ -481,6 +494,7 @@ class CommandHandler {
         
         try {
           if (item.isDirectory()) {
+            // Charger les sous-dossiers
             const subItems = fs.readdirSync(fullPath, { withFileTypes: true });
             for (const subItem of subItems) {
               if (subItem.isFile() && subItem.name.endsWith('.js')) {
@@ -489,17 +503,24 @@ class CommandHandler {
               }
             }
           } else if (item.isFile() && item.name.endsWith('.js')) {
+            // SUPPRIMER LES COMMANDES SPÉCIFIÉES
+            const fileName = item.name.toLowerCase();
+            if (fileName.includes('quiz') || fileName.includes('ascii') || 
+                fileName.includes('hack') || fileName.includes('ping')) {
+              console.log(`${colors.yellow}⚠️ Commande supprimée: ${item.name}${colors.reset}`);
+              continue;
+            }
             count += this.loadSingleCommand(fullPath);
           }
         } catch (error) {
-          console.log(`⚠️ Erreur chargement ${item.name}: ${error.message}`);
+          console.log(`${colors.yellow}⚠️ Erreur chargement ${item.name}: ${error.message}${colors.reset}`);
         }
       }
       
       return count;
       
     } catch (error) {
-      console.log(`⚠️ Erreur scan dossier commands: ${error.message}`);
+      console.log(`${colors.yellow}⚠️ Erreur scan dossier commands: ${error.message}${colors.reset}`);
       return count;
     }
   }
@@ -513,292 +534,39 @@ class CommandHandler {
         const commandName = command.name.toLowerCase();
         
         if (this.commands.has(commandName)) {
-          console.log(`⚠️ Commande en doublon ignorée: ${commandName}`);
+          console.log(`${colors.yellow}⚠️ Commande en doublon ignorée: ${commandName}${colors.reset}`);
           return 0;
         }
         
         this.commands.set(commandName, command);
         
         const relativePath = path.relative(process.cwd(), fullPath);
-        console.log(`✅ Commande chargée: ${command.name} (${relativePath})`);
+        console.log(`${colors.green}✅ Commande chargée: ${colors.cyan}${command.name}${colors.reset} (${relativePath})`);
         return 1;
       } else {
-        console.log(`⚠️ Format invalide: ${path.basename(fullPath)}`);
+        console.log(`${colors.yellow}⚠️ Format invalide: ${path.basename(fullPath)} - manque name ou execute${colors.reset}`);
         return 0;
       }
       
     } catch (requireError) {
       if (!requireError.message.includes('Cannot find module')) {
-        console.log(`⚠️ Erreur chargement ${path.basename(fullPath)}: ${requireError.message}`);
+        console.log(`${colors.yellow}⚠️ Erreur chargement ${path.basename(fullPath)}: ${requireError.message}${colors.reset}`);
       }
       return 0;
     }
-  }
-
-  loadBuiltinCommands() {
-    // Commande menu
-    this.commands.set("menu", {
-      name: "menu",
-      description: "Affiche le menu des commandes",
-      execute: async (sock, msg, args, context) => {
-        const from = msg.key.remoteJid;
-        const currentPrefix = context?.prefix || prefix;
-
-        const menuText = `
-┏━━❖ ＡＲＣＡＮＥ ❖━━┓
-┃ 🛡️ HEX✦GATE V2
-┃ 👨‍💻 Dev : T.me/hextechcar
-┃ 
-┗━━━━━━━━━━━━━━━━
-
-╭━━〔 𝚄𝚃𝙸𝙻𝙸𝚃𝙰𝙸𝚁𝙴 〕━━┈⊷
-┃✰│➫ ${prefix}𝚖𝚎𝚗𝚞
-┃✰│➫ ${prefix}𝚑𝚎𝚕𝚙
-┃✰│➫ ${prefix}𝚜𝚝𝚊𝚝𝚞𝚜
-┃✰│➫ ${prefix}𝚒𝚗𝚏𝚘
-╰━━━━━━━━━━━━━━━┈⊷
-
-╭━━〔 𝙶𝚁𝙾𝚄𝙿𝙴 〕━━┈⊷
-┃✰│➫ ${prefix}𝚕𝚒𝚗𝚔
-┃✰│➫ ${prefix}𝚝𝚊𝚐𝚊𝚕𝚕
-┃✰│➫ ${prefix}𝚝𝚊𝚐𝚊𝚍𝚖𝚒𝚗
-┃✰│➫ ${prefix}𝚠𝚎𝚕𝚌𝚘𝚖𝚎 𝚘𝚗/𝚘𝚏𝚏
-╰━━━━━━━━━━━━━━━┈⊷
-
-╭━━〔 𝙲𝙰𝙽𝙰𝙻 𝚃𝙴𝙻𝙴𝙶𝚁𝙰𝙼 〕━━┈⊷
-┃✰│➫ T.me/hextechcar
-╰━━━━━━━━━━━━━━━┈⊷
-
-*powered by HEXTECH™*`;
-
-        try {
-          await sock.sendMessage(from, {
-            image: { url: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRv53_O-g3xpl_VtrctVQ0HbSUMCJ3fUkfx6l1SiUc64ag4ypnPyBR5k0s&s=10" },
-            caption: menuText
-          });
-        } catch (error) {
-          await sock.sendMessage(from, { text: menuText });
-        }
-      }
-    });
-
-    // Commande help
-    this.commands.set("help", {
-      name: "help",
-      description: "Affiche l'aide",
-      execute: async (sock, msg, args, context) => {
-        const from = msg.key.remoteJid;
-        const currentPrefix = context?.prefix || prefix;
-        
-        const helpText = `🛠️ *AIDE HEXGATE*\n\nPrefix: ${currentPrefix}\n\nUtilisez ${currentPrefix}menu pour voir toutes les commandes.\n\n👑 Propriétaire: ${config.ownerNumber}\n👤 Vous: ${context?.sender || 'Inconnu'}`;
-        
-        await sendFormattedMessage(sock, from, helpText);
-      }
-    });
-
-    // Commande status
-    this.commands.set("status", {
-      name: "status",
-      description: "Affiche le statut du bot",
-      execute: async (sock, msg, args, context) => {
-        const from = msg.key.remoteJid;
-        
-        const statusText = `📊 *STATUS DU BOT*\n\n🏷️ Nom: HEXGATE V2\n🔓 Mode: ${botPublic ? 'Public' : 'Privé'}\n🎤 Fake Recording: ${fakeRecording ? 'ACTIVÉ' : 'DÉSACTIVÉ'}\n💾 Sessions actives: ${activeSessions.size}/${MAX_SESSIONS}\n🖼️ Images sauvegardées: ${fs.readdirSync(DELETED_IMAGES_FOLDER).length}\n⏰ Uptime: ${process.uptime().toFixed(0)}s\n🌐 Interface web: Port ${PORT}`;
-        
-        await sendFormattedMessage(sock, from, statusText);
-      }
-    });
-
-    // Commande info
-    this.commands.set("info", {
-      name: "info",
-      description: "Affiche les informations du groupe",
-      execute: async (sock, msg, args) => {
-        const from = msg.key.remoteJid;
-
-        if (!from.endsWith("@g.us")) {
-          return await sock.sendMessage(from, { text: "❌ Commande réservée aux groupes" });
-        }
-
-        try {
-          const metadata = await sock.groupMetadata(from);
-          const participants = metadata.participants || [];
-          const total = participants.length;
-          
-          const admins = participants
-            .filter(p => p.admin === "admin" || p.admin === "superadmin")
-            .map(p => `@${p.id.split("@")[0]}`)
-            .join(", ");
-
-          const groupName = metadata.subject || "Groupe sans nom";
-          const groupDesc = metadata.desc?.toString() || "Aucune description";
-
-          const infoText = `
-┏━━━❖ ＧＲＯＵＰ ＩＮＦＯ ❖━━━┓
-┃ Nom : ${groupName}
-┃ Membres : ${total}
-┃ Admins : ${admins || "Aucun"}
-┃ Description : ${groupDesc}
-┗━━━━━━━━━━━━━━━━━━━━━━┛
-*powered by HEXTECH*`;
-
-          await sock.sendMessage(from, {
-            text: infoText,
-            mentions: participants
-              .filter(p => p.admin === "admin" || p.admin === "superadmin")
-              .map(p => p.id)
-          });
-
-        } catch (err) {
-          console.log("info error:", err);
-          await sock.sendMessage(from, { text: "❌ Impossible de récupérer les infos" });
-        }
-      }
-    });
-
-    // Commande link
-    this.commands.set("link", {
-      name: "link",
-      description: "Donne le lien d'invitation du groupe",
-      execute: async (sock, msg, args) => {
-        const from = msg.key.remoteJid;
-
-        if (!from.endsWith("@g.us")) {
-          return await sock.sendMessage(from, { text: "❌ Commande réservée aux groupes" });
-        }
-
-        try {
-          const inviteCode = await sock.groupInviteCode(from);
-
-          if (!inviteCode) {
-            return await sock.sendMessage(from, {
-              text: "❌ Impossible de récupérer le lien."
-            });
-          }
-
-          await sock.sendMessage(from, {
-            text: `🔗 Lien du groupe :\nhttps://chat.whatsapp.com/${inviteCode}`
-          });
-
-        } catch (err) {
-          console.log("link error:", err);
-          await sock.sendMessage(from, { text: "❌ Erreur lors de la récupération du lien" });
-        }
-      }
-    });
-
-    // Commande tagall
-    this.commands.set("tagall", {
-      name: "tagall",
-      description: "Mentionne tout le monde",
-      execute: async (sock, msg, args, context) => {
-        const from = msg.key.remoteJid;
-
-        if (!from.endsWith("@g.us")) {
-          await sock.sendMessage(from, { text: "❌ Commande réservée aux groupes" });
-          return;
-        }
-
-        const metadata = await sock.groupMetadata(from);
-        const participants = metadata.participants || [];
-
-        const text = args.join(" ") || "📢 Notification à tous !";
-
-        const mentions = participants.map(p => p.id);
-
-        try {
-          await sock.sendMessage(from, {
-            text: text,
-            mentions: mentions
-          });
-        } catch (error) {
-          await sock.sendMessage(from, { text: `❌ Erreur: ${error.message}` });
-        }
-      }
-    });
-
-    // Commande tagadmin
-    this.commands.set("tagadmin", {
-      name: "tagadmin",
-      description: "Mentionne tous les admins",
-      execute: async (sock, msg, args, context) => {
-        const from = msg.key.remoteJid;
-
-        if (!from.endsWith("@g.us")) {
-          return await sock.sendMessage(from, { text: "❌ Commande réservée aux groupes" });
-        }
-
-        try {
-          const metadata = await sock.groupMetadata(from);
-          const participants = metadata.participants || [];
-
-          const admins = participants.filter(p => p.admin === "admin" || p.admin === "superadmin");
-          if (admins.length === 0) {
-            return await sock.sendMessage(from, { text: "❌ Aucun admin trouvé" });
-          }
-
-          let text = `📣 Mention des admins :\n\n`;
-          const mentions = [];
-
-          for (const admin of admins) {
-            const name = admin.notify || admin.id.split("@")[0];
-            text += `➤ @${admin.id.split("@")[0]} (${name})\n`;
-            mentions.push(admin.id);
-          }
-
-          text += `\n> Powered by HEXTECH`;
-
-          await sock.sendMessage(from, { text, mentions });
-
-        } catch (err) {
-          console.log("tagadmin error:", err);
-          await sock.sendMessage(from, { text: "❌ Impossible de récupérer les admins" });
-        }
-      }
-    });
-
-    // Commande welcome
-    this.commands.set("welcome", {
-      name: "welcome",
-      description: "Active/désactive les messages de bienvenue",
-      execute: async (sock, msg, args) => {
-        const from = msg.key.remoteJid;
-
-        try {
-          if (args[0] === "on") {
-            welcomeEnabled = true;
-            return await sock.sendMessage(from, { text: "✅ Messages de bienvenue activés" });
-          } else if (args[0] === "off") {
-            welcomeEnabled = false;
-            return await sock.sendMessage(from, { text: "❌ Messages de bienvenue désactivés" });
-          } else {
-            return await sock.sendMessage(from, {
-              text: "❌ Usage : .welcome on/off"
-            });
-          }
-        } catch (err) {
-          console.log("welcome error:", err);
-          await sock.sendMessage(from, { text: "❌ Erreur" });
-        }
-      }
-    });
-
-    console.log(`✅ Commandes intégrées chargées`);
   }
 
   async execute(commandName, sock, msg, args, context) {
     const cmd = commandName.toLowerCase();
     
     if (!this.commands.has(cmd)) {
-      console.log(`⚠️ Commande inconnue: ${cmd}`);
+      console.log(`${colors.yellow}⚠️ Commande inconnue: ${cmd}${colors.reset}`);
       
       if (context?.botPublic) {
         try {
-          await sock.sendMessage(msg.key.remoteJid, { 
-            text: `❌ Commande "${cmd}" non reconnue. Tapez ${context?.prefix || prefix}menu` 
-          });
+          await sendFormattedMessage(sock, msg.key.remoteJid, `❌ Commande "${cmd}" non reconnue. Tapez ${context?.prefix || prefix}menu pour voir la liste des commandes.`);
         } catch (error) {
-          console.log(`⚠️ Impossible d'envoyer réponse`);
+          console.log(`${colors.yellow}⚠️ Impossible d'envoyer réponse${colors.reset}`);
         }
       }
       return false;
@@ -807,27 +575,39 @@ class CommandHandler {
     const command = this.commands.get(cmd);
     
     if (!command || typeof command.execute !== 'function') {
-      console.log(`❌ Commande invalide: ${cmd}`);
+      console.log(`${colors.red}❌ Commande invalide: ${cmd}${colors.reset}`);
       return false;
     }
     
     try {
-      console.log(`⚡ Exécution: ${cmd} par ${context?.sender || 'Inconnu'}`);
+      console.log(`${colors.cyan}⚡ Exécution: ${cmd} par ${context?.sender || 'Inconnu'}${colors.reset}`);
+      
+      // Réaction emoji (optionnel)
+      try {
+        if (autoReact) {
+          const randomEmoji = randomEmojis[Math.floor(Math.random() * randomEmojis.length)];
+          await sock.sendMessage(msg.key.remoteJid, {
+            react: { text: randomEmoji, key: msg.key }
+          });
+          console.log(`${colors.magenta}🎯 Réaction emoji: ${randomEmoji} pour ${cmd}${colors.reset}`);
+        }
+      } catch (reactError) {
+        // Ignorer les erreurs de réaction
+      }
       
       await command.execute(sock, msg, args, context);
       
-      console.log(`✅ Commande exécutée: ${cmd}`);
+      console.log(`${colors.green}✅ Commande exécutée avec succès: ${cmd}${colors.reset}`);
       return true;
       
     } catch (error) {
-      console.log(`❌ Erreur exécution ${cmd}: ${error.message}`);
+      console.log(`${colors.red}❌ Erreur exécution ${cmd}: ${error.message}${colors.reset}`);
+      console.error(error);
       
       try {
-        await sock.sendMessage(msg.key.remoteJid, { 
-          text: `❌ Erreur d'exécution\nCommande: ${cmd}\nErreur: ${error.message}` 
-        });
+        await sendFormattedMessage(sock, msg.key.remoteJid, `❌ *ERREUR D'EXÉCUTION*\n\nCommande: ${cmd}\nErreur: ${error.message}\n\nContactez le développeur si le problème persiste.`);
       } catch (sendError) {
-        console.log(`⚠️ Impossible d'envoyer message d'erreur`);
+        console.log(`${colors.yellow}⚠️ Impossible d'envoyer message d'erreur${colors.reset}`);
       }
       
       return false;
@@ -837,10 +617,209 @@ class CommandHandler {
   getCommandList() {
     return Array.from(this.commands.keys());
   }
+
+  reloadCommands() {
+    console.log(`${colors.cyan}🔄 Rechargement des commandes...${colors.reset}`);
+    
+    try {
+      // Sauvegarder les commandes actuelles
+      const currentCommands = new Map(this.commands);
+      
+      // Réinitialiser
+      this.commands.clear();
+      
+      // Recharger
+      this.initializeCommands();
+      
+      // Si le rechargement échoue, restaurer les anciennes commandes
+      if (this.commands.size === 0) {
+        console.log(`${colors.yellow}⚠️ Rechargement échoué, restauration des commandes précédentes${colors.reset}`);
+        this.commands = currentCommands;
+      }
+      
+      console.log(`${colors.green}✅ ${this.commands.size} commandes rechargées${colors.reset}`);
+    } catch (error) {
+      console.log(`${colors.red}❌ Erreur rechargement commandes: ${error.message}${colors.reset}`);
+      console.log(`${colors.yellow}⚠️ Utilisation des commandes existantes${colors.reset}`);
+    }
+  }
 }
 
-// ==================== DÉMARRAGE DU BOT ====================
+// 📊 Tracker d'activité simple
+global.activityTracker = global.activityTracker || new Map();
 
+// Fonction pour tracker l'activité
+function trackActivity(msg) {
+  const from = msg.key.remoteJid;
+  const sender = msg.key.participant || msg.key.remoteJid;
+
+  if (!from.endsWith("@g.us")) return;
+
+  const groupData = global.activityTracker.get(from) || {};
+  groupData[sender] = Date.now();
+  global.activityTracker.set(from, groupData);
+}
+
+// Fonction pour vérifier si un expéditeur est propriétaire
+function isOwner(senderJid) {
+  const normalizedJid = senderJid.split(":")[0];
+  const ownerJid = OWNER_NUMBER.split(":")[0];
+  return normalizedJid === ownerJid;
+}
+
+// Fonction pour vérifier si un expéditeur est admin dans un groupe
+async function isAdminInGroup(sock, jid, senderJid) {
+  try {
+    if (!jid.endsWith("@g.us")) return false;
+    
+    const metadata = await sock.groupMetadata(jid);
+    const participant = metadata.participants.find(p => p.id === senderJid);
+    
+    if (!participant) return false;
+    
+    return participant.admin === "admin" || participant.admin === "superadmin";
+  } catch (error) {
+    console.log(`${colors.yellow}⚠️ Erreur vérification admin: ${error.message}${colors.reset}`);
+    return false;
+  }
+}
+
+// 📱 Affichage logo
+function displayBanner() {
+  console.clear();
+  console.log(`
+${colors.magenta}╔══════════════════════════════════════════════════╗
+║${colors.bright}${colors.cyan}         WHATSAPP BOT - HEXGATE EDITION          ${colors.reset}${colors.magenta}║
+╠══════════════════════════════════════════════════╣
+║${colors.green} ✅ BOT EN MODE PUBLIC - TOUS ACCÈS AUTORISÉS${colors.magenta}║
+║${colors.green} ✅ FAKE RECORDING ACTIVÉ                    ${colors.magenta}║
+║${colors.green} ✅ RESTAURATION MESSAGES COMME SUR L'IMAGE   ${colors.magenta}║
+║${colors.green} ✅ RESTAURATION IMAGES SUPPRIMÉES            ${colors.magenta}║
+║${colors.green} ✅ API WEB INTÉGRÉE POUR PAIRING             ${colors.magenta}║
+║${colors.green} ✅ SESSIONS LIMITÉES: ${MAX_SESSIONS} UTILISATEURS      ${colors.magenta}║
+╚══════════════════════════════════════════════════╝${colors.reset}
+`);
+}
+
+// ============================================
+// 🌐 API WEB POUR INTERACTION AVEC INDEX.HTML
+// ============================================
+function startWebServer(port = process.env.PORT || 3000) {
+  const server = http.createServer(async (req, res) => {
+    // CORS headers
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    
+    // Gérer les pré-requêtes OPTIONS
+    if (req.method === 'OPTIONS') {
+      res.writeHead(204);
+      res.end();
+      return;
+    }
+    
+    console.log(`${colors.cyan}🌐 Requête API: ${req.method} ${req.url}${colors.reset}`);
+    
+    // Route pour le statut du bot
+    if (req.method === 'GET' && req.url === '/api/bot-status') {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        ready: botReady,
+        sessions: {
+          current: getActiveSessionsCount(),
+          max: MAX_SESSIONS,
+          available: MAX_SESSIONS - getActiveSessionsCount()
+        },
+        timestamp: Date.now()
+      }));
+      return;
+    }
+    
+    // Route pour générer un code pair
+    if (req.method === 'POST' && req.url === '/api/generate-pair-code') {
+      let body = '';
+      
+      req.on('data', chunk => {
+        body += chunk.toString();
+      });
+      
+      req.on('end', async () => {
+        try {
+          const data = JSON.parse(body);
+          const phone = data.phone;
+          
+          if (!phone) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ success: false, error: 'Numéro de téléphone requis' }));
+            return;
+          }
+          
+          const result = await generatePairCode(phone);
+          
+          res.writeHead(result.success ? 200 : 400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify(result));
+          
+        } catch (error) {
+          res.writeHead(500, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: false, error: 'Erreur serveur: ' + error.message }));
+        }
+      });
+      return;
+    }
+    
+    // Route pour servir index.html
+    if (req.method === 'GET' && (req.url === '/' || req.url === '/index.html')) {
+      try {
+        const htmlPath = path.join(__dirname, 'index.html');
+        if (fs.existsSync(htmlPath)) {
+          const htmlContent = fs.readFileSync(htmlPath, 'utf8');
+          res.writeHead(200, { 'Content-Type': 'text/html' });
+          res.end(htmlContent);
+        } else {
+          res.writeHead(404, { 'Content-Type': 'text/plain' });
+          res.end('Fichier index.html non trouvé');
+        }
+      } catch (error) {
+        res.writeHead(500, { 'Content-Type': 'text/plain' });
+        res.end('Erreur serveur: ' + error.message);
+      }
+      return;
+    }
+    
+    // Route pour les statistiques
+    if (req.method === 'GET' && req.url === '/api/stats') {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        botReady: botReady,
+        sessions: {
+          current: getActiveSessionsCount(),
+          max: MAX_SESSIONS,
+          available: MAX_SESSIONS - getActiveSessionsCount(),
+          active: Array.from(activeSessions)
+        },
+        pairingCodes: Array.from(pairingCodes.keys()),
+        uptime: process.uptime(),
+        timestamp: Date.now()
+      }));
+      return;
+    }
+    
+    // Route par défaut
+    res.writeHead(404, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: 'Route non trouvée' }));
+  });
+  
+  server.listen(port, () => {
+    console.log(`${colors.green}🌐 Serveur web démarré sur le port ${port}${colors.reset}`);
+    console.log(`${colors.cyan}🔗 Accédez à l'interface web: http://localhost:${port}${colors.reset}`);
+  });
+  
+  return server;
+}
+
+// ============================================
+// ⚡ FONCTION PRINCIPALE DU BOT OPTIMISÉE
+// ============================================
 async function startBot() {
   const rl = readline.createInterface({
     input: process.stdin,
@@ -849,30 +828,44 @@ async function startBot() {
 
   async function askForPhoneNumber() {
     return new Promise((resolve) => {
-      rl.question(`
-╔══════════════════════════╗
+      rl.question(`${colors.cyan}╔══════════════════════════╗
 ║        HEX-TECH - V2          ║
 ║  ──────────────────────  ║
-║  📱 INSÉREZ VOTRE NUMÉRO WHATSAPP :            ║
-║                                              ║
-╚══════════════════════════╝
-`, (phone) => {
+║  ██╗  ██╗███████╗██╗  ██╗║
+║  ██║  ██║██╔════╝╚██╗██╔╝║
+║  ███████║█████╗   ╚███╔╝ ║
+║  ██╔══██║██╔══╝   ██╔██╗ ║
+║  ██║  ██║███████╗██╔╝ ██╗║
+║  ╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝║   ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓
+▓    ████████╗███████╗ ██████╗▓
+▓    ╚══██╔══╝██╔════╝██╔════╝▓
+▓       ██║   █████╗  ██║     ▓
+▓       ██║   ██╔══╝  ██║     ▓
+▓       ██║   ███████╗╚██████╗▓
+▓       ╚═╝   ╚══════╝ ╚═════╝▓
+▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓ 
+
+│    ██╗   ██╗██████╗                │
+│    ██║   ██║╚════██╗               │
+│    ██║   ██║ █████╔╝               │
+│    ╚██╗ ██╔╝██╔═══╝                │
+│     ╚████╔╝ ███████╗               │
+│      ╚═══╝  ╚══════╝               │
+└─────────────────────────┃
+┃  📱 INSÉREZ VOTRE NUMÉRO WHATSAPP :            ┃
+┃                                              ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+${colors.reset}`, (phone) => {
         resolve(phone.trim());
       });
     });
   }
 
   try {
-    console.log(`
-╔══════════════════════════════════════════════════╗
-║         WHATSAPP BOT - HEXGATE EDITION          ║
-╠══════════════════════════════════════════════════╣
-║ ✅ BOT EN MODE PUBLIC - TOUS ACCÈS AUTORISÉS║
-║ ✅ INTERFACE WEB SUR PORT ${PORT}                  ║
-║ ✅ MAX ${MAX_SESSIONS} SESSIONS SIMULTANÉES           ║
-║ ✅ RESTAURATION MESSAGES & IMAGES              ║
-╚══════════════════════════════════════════════════╝
-`);
+    displayBanner();
+    
+    // Démarrer le serveur web
+    startWebServer();
     
     const { state, saveCreds } = await useMultiFileAuthState("auth_info_baileys");
     const { version } = await fetchLatestBaileysVersion();
@@ -897,17 +890,17 @@ async function startBot() {
       if (qr) {
         const phoneNumber = await askForPhoneNumber();
         if (!phoneNumber || phoneNumber.length < 9) {
-          console.log(`❌ Numéro invalide`);
+          console.log(`${colors.red}❌ Numéro invalide${colors.reset}`);
           process.exit(1);
         }
 
         try {
           const code = await sock.requestPairingCode(phoneNumber);
-          console.log(`✅ Code de pairing: ${code}`);
-          console.log(`📱 Appuyez sur les trois points > Périphériques liés > Ajouter un périphérique`);
+          console.log(`${colors.green}✅ Code de pairing: ${code}${colors.reset}`);
+          console.log(`${colors.cyan}📱 Appuyez sur les trois points > Périphériques liés > Ajouter un périphérique sur WhatsApp${colors.reset}`);
           await delay(3000);
         } catch (pairError) {
-          console.log(`❌ Erreur pairing: ${pairError.message}`);
+          console.log(`${colors.red}❌ Erreur pairing: ${pairError.message}${colors.reset}`);
           process.exit(1);
         }
       }
@@ -915,291 +908,36 @@ async function startBot() {
       if (connection === "close") {
         const reason = new Error(lastDisconnect?.error)?.output?.statusCode;
         if (reason === DisconnectReason.loggedOut) {
-          console.log(`❌ Déconnecté, suppression des données...`);
+          console.log(`${colors.red}❌ Déconnecté, suppression des données d'authentification...${colors.reset}`);
           exec("rm -rf auth_info_baileys", () => {
-            console.log(`🔄 Redémarrage...`);
+            console.log(`${colors.yellow}🔄 Redémarrage du bot...${colors.reset}`);
             startBot();
           });
         } else {
-          console.log(`🔄 Reconnexion...`);
+          console.log(`${colors.yellow}🔄 Reconnexion...${colors.reset}`);
           startBot();
         }
       } else if (connection === "open") {
-        console.log(`✅ Connecté à WhatsApp!`);
-        console.log(`🔓 Mode: ${botPublic ? 'PUBLIC' : 'PRIVÉ'}`);
-        console.log(`🎤 Fake Recording: ${fakeRecording ? 'ACTIVÉ' : 'DÉSACTIVÉ'}`);
-        console.log(`🌐 Interface web: http://0.0.0.0:${PORT}`);
+        console.log(`${colors.green}✅ Connecté à WhatsApp!${colors.reset}`);
+        console.log(`${colors.cyan}🔓 Mode: ${botPublic ? 'PUBLIC' : 'PRIVÉ'}${colors.reset}`);
+        console.log(`${colors.cyan}🎤 Fake Recording: ${fakeRecording ? 'ACTIVÉ' : 'DÉSACTIVÉ'}${colors.reset}`);
+        console.log(`${colors.cyan}👥 Sessions max: ${MAX_SESSIONS} utilisateurs${colors.reset}`);
         
         // 🔴 CONFIRMATION DE CONNEXION AU PROPRIÉTAIRE
         try {
-          const confirmMessage = `✅ *HEX-GATE CONNECTEE*\n\n🚀 *HEXGATE V2* est en ligne!\n📊 *Commandes:* ${commandHandler.getCommandList().length}\n🔧 *Mode:* ${botPublic ? 'PUBLIC' : 'Privé'}\n🌐 *Interface web:* Port ${PORT}\n👥 *Sessions:* ${activeSessions.size}/${MAX_SESSIONS}\n🔓 *systeme:* tapez menu`;
+          const confirmMessage = `✅ *HEX-GATE CONNECTEE*\n\n🚀 *HEXGATE V2* est en ligne!\n📊 *Commandes:* ${commandHandler.getCommandList().length}\n🔧 *Mode:* ${botPublic ? 'PUBLIC' : 'Privé'}\n🎤 *Fake Recording:* ${fakeRecording ? 'ACTIVÉ' : 'DÉSACTIVÉ'}\n👥 *Sessions:* ${MAX_SESSIONS} max\n🔓 *Restauration:* Messages & Images ACTIVÉE\n🔗 *Interface Web:* Prête à l'emploi`;
           
           await sock.sendMessage(OWNER_NUMBER, { text: confirmMessage });
-          console.log(`✅ Confirmation envoyée au propriétaire: ${OWNER_NUMBER}`);
+          console.log(`${colors.green}✅ Confirmation envoyée au propriétaire: ${OWNER_NUMBER}${colors.reset}`);
         } catch (error) {
-          console.log(`⚠️ Impossible d'envoyer message au propriétaire: ${error.message}`);
+          console.log(`${colors.yellow}⚠️ Impossible d'envoyer message au propriétaire: ${error.message}${colors.reset}`);
         }
         
         botReady = true;
       }
     });
 
-    // Gestion des messages supprimés
-    sock.ev.on("messages.upsert", async ({ messages }) => {
-      try {
-        for (const msg of messages) {
-          if (!msg.message) continue;
-
-          const senderJid = msg.key.participant || msg.key.remoteJid;
-          const isOwnerMsg = isOwner(senderJid);
-          
-          // Détection des messages supprimés
-          if (msg.message?.protocolMessage?.type === 0) {
-            const deletedKey = msg.message.protocolMessage.key;
-            const deletedId = deletedKey.id;
-            const chatId = deletedKey.remoteJid || msg.key.remoteJid;
-            const isPrivateChat = chatId?.endsWith('@s.whatsapp.net');
-            
-            console.log(`🚨 SUPPRESSION DÉTECTÉE: ${deletedId} dans ${chatId}`);
-
-            if (isPrivateChat) {
-              let originalMsg = messageStore.get(deletedId);
-              
-              if (!originalMsg) {
-                const filePath = path.join(DELETED_MESSAGES_FOLDER, `${deletedId}.json`);
-                if (fs.existsSync(filePath)) {
-                  try {
-                    originalMsg = JSON.parse(fs.readFileSync(filePath, 'utf8'));
-                  } catch (parseError) {
-                    originalMsg = null;
-                  }
-                }
-              }
-
-              if (originalMsg) {
-                const originalMessageType = originalMsg.messageType || Object.keys(originalMsg.message)[0];
-                const senderNumber = originalMsg.key?.participant || originalMsg.key?.remoteJid;
-
-                if (originalMessageType === 'imageMessage') {
-                  try {
-                    let imageBuffer = null;
-                    let caption = originalMsg.message?.imageMessage?.caption || "";
-                    
-                    const imagePath = path.join(DELETED_IMAGES_FOLDER, `${deletedId}.jpg`);
-                    if (fs.existsSync(imagePath)) {
-                      imageBuffer = fs.readFileSync(imagePath);
-                    }
-                    
-                    if (imageBuffer) {
-                      await sock.sendMessage(OWNER_NUMBER, {
-                        image: imageBuffer,
-                        caption: `*𝙼𝚎𝚜𝚜𝚊𝚐𝚎 𝚜𝚞𝚙𝚙𝚛𝚒𝚖𝚎𝚛 𝚍𝚎:* @${senderNumber.split('@')[0]}\n\n${caption || "[Image sans description]"}\n\n> 𝚙𝚘𝚠𝚎𝚛𝚎𝚍 𝚋𝚢 𝙷𝙴𝚇𝚃𝙴𝙲𝙷`,
-                        mentions: [senderNumber]
-                      });
-                    }
-                    
-                  } catch (imageError) {
-                    console.log(`❌ Erreur restauration image: ${imageError.message}`);
-                  }
-                }
-                
-                // Nettoyer les fichiers
-                messageStore.delete(deletedId);
-                const filePath = path.join(DELETED_MESSAGES_FOLDER, `${deletedId}.json`);
-                if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
-                
-                const imagePath = path.join(DELETED_IMAGES_FOLDER, `${deletedId}.jpg`);
-                if (fs.existsSync(imagePath)) fs.unlinkSync(imagePath);
-              }
-            }
-            continue;
-          }
-
-          // Sauvegarde des messages
-          const messageType = Object.keys(msg.message)[0];
-          if (messageType === "protocolMessage") continue;
-
-          const from = msg.key.remoteJid;
-          const sender = msg.key.participant || msg.key.remoteJid;
-          const isGroup = from?.endsWith('@g.us');
-
-          if (!msg.key.fromMe && !isGroup) {
-            console.log(`📥 Message privé de ${sender}`);
-          }
-
-          let body = "";
-          if (messageType === "conversation") {
-            body = msg.message.conversation;
-          } else if (messageType === "extendedTextMessage") {
-            body = msg.message.extendedTextMessage.text;
-          } else if (messageType === "imageMessage") {
-            body = msg.message.imageMessage?.caption || "";
-          } else if (messageType === "videoMessage") {
-            body = msg.message.videoMessage?.caption || "";
-          } else {
-            continue;
-          }
-
-          // Anti-lien dans les groupes
-          if (antiLink && body && isGroup) {
-            const linkRegex = /(https?:\/\/[^\s]+|www\.[^\s]+)/gi;
-            const hasLink = linkRegex.test(body);
-            
-            if (hasLink && !isOwnerMsg) {
-              console.log(`🚫 LIEN DÉTECTÉ par ${sender}`);
-              
-              const warnings = antiLinkWarnings.get(sender) || 0;
-              
-              if (warnings < 2) {
-                const newWarnings = warnings + 1;
-                antiLinkWarnings.set(sender, newWarnings);
-                
-                await sock.sendMessage(from, {
-                  text: `*⚠️ AVERTISSEMENT ${newWarnings}/3*\n@${sender.split('@')[0]} les liens sont interdits !`,
-                  mentions: [sender]
-                });
-                
-                try {
-                  await sock.sendMessage(from, {
-                    delete: msg.key
-                  });
-                } catch (deleteError) {}
-              } else {
-                try {
-                  await sock.groupParticipantsUpdate(from, [sender], "remove");
-                  await sock.sendMessage(from, {
-                    text: `*🚨 SUPPRESSION*\n@${sender.split('@')[0]} supprimé pour 3 liens !`,
-                    mentions: [sender]
-                  });
-                  antiLinkWarnings.delete(sender);
-                } catch (removeError) {}
-              }
-              continue;
-            }
-          }
-
-          // Sauvegarde du message
-          const savedMsg = {
-            key: msg.key,
-            message: msg.message,
-            pushName: msg.pushName || sender,
-            timestamp: Date.now(),
-            messageType: messageType
-          };
-
-          messageStore.set(msg.key.id, savedMsg);
-
-          const filePath = path.join(DELETED_MESSAGES_FOLDER, `${msg.key.id}.json`);
-          fs.writeFileSync(filePath, JSON.stringify(savedMsg, null, 2));
-
-          if (messageType === 'imageMessage') {
-            try {
-              const imageMsg = msg.message.imageMessage;
-              const stream = await downloadContentFromMessage(imageMsg, 'image');
-              let buffer = Buffer.from([]);
-              
-              for await (const chunk of stream) {
-                buffer = Buffer.concat([buffer, chunk]);
-              }
-              
-              const imagePath = path.join(DELETED_IMAGES_FOLDER, `${msg.key.id}.jpg`);
-              fs.writeFileSync(imagePath, buffer);
-              
-              savedMsg.imagePath = imagePath;
-              fs.writeFileSync(filePath, JSON.stringify(savedMsg, null, 2));
-              
-            } catch (imageError) {
-              console.log(`⚠️ Erreur sauvegarde image: ${imageError.message}`);
-            }
-          }
-
-          // Traitement des commandes
-          if (body.startsWith(prefix)) {
-            const args = body.slice(prefix.length).trim().split(/ +/);
-            const command = args.shift().toLowerCase();
-            
-            console.log(`🎯 Commande: ${command} par ${sender}`);
-            
-            const context = {
-              isOwner: isOwnerMsg,
-              sender,
-              prefix: prefix,
-              botPublic: botPublic || isOwnerMsg
-            };
-            
-            if (botPublic || isOwnerMsg) {
-              await commandHandler.execute(command, sock, msg, args, context);
-            } else {
-              console.log(`⚠️ Commande ignorée (mode privé): ${command}`);
-            }
-            continue;
-          }
-
-          // Commandes propriétaire
-          if (isOwnerMsg) {
-            if (body === prefix + "public") {
-              botPublic = true;
-              config.botPublic = true;
-              fs.writeFileSync('./config.json', JSON.stringify(config, null, 2));
-              await sock.sendMessage(OWNER_NUMBER, { text: `✅ *BOT PASSÉ EN MODE PUBLIC*` });
-              console.log(`🔓 Mode public activé`);
-              continue;
-            }
-            
-            if (body === prefix + "private") {
-              botPublic = false;
-              config.botPublic = false;
-              fs.writeFileSync('./config.json', JSON.stringify(config, null, 2));
-              await sock.sendMessage(OWNER_NUMBER, { text: `🔒 *BOT PASSÉ EN MODE PRIVÉ*` });
-              console.log(`🔒 Mode privé activé`);
-              continue;
-            }
-            
-            if (body === prefix + "sessions") {
-              const sessions = Array.from(activeSessions.entries()).map(([phone, data]) => 
-                `• ${phone}: ${data.code} (${Math.round((SESSION_TIMEOUT - (Date.now() - data.timestamp)) / 1000)}s)`
-              ).join('\n');
-              
-              await sock.sendMessage(OWNER_NUMBER, { 
-                text: `📊 *SESSIONS ACTIVES (${activeSessions.size}/${MAX_SESSIONS})*\n\n${sessions || 'Aucune session'}` 
-              });
-              continue;
-            }
-          }
-        }
-      } catch (error) {
-        console.log(`❌ Erreur traitement message: ${error.message}`);
-      }
-    });
-
-    // Gestion des participants de groupe (welcome)
-    sock.ev.on("group-participants.update", async (update) => {
-      try {
-        if (!welcomeEnabled || update.action !== "add") return;
-
-        const groupJid = update.id;
-        const newMemberJid = update.participants[0];
-        const newMemberName = newMemberJid.split("@")[0];
-
-        const text = `
-┏━━━❖ ＡＲＣＡＮＥ❖━━━━┓
-┃ @${newMemberName}
-┃ 
-┃ 𝙱𝚒𝚎𝚗𝚟𝚎𝚗𝚞𝚎 ! 𝚙𝚊𝚞𝚟𝚛𝚎 𝚖𝚘𝚛𝚝𝚎𝚕
-┗━━━━━━━━━━━━━━━━━━┛`;
-
-        await sock.sendMessage(groupJid, {
-          image: { url: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRhoFTz9jVFxTVGAuh9RJIaNF0wH8WGvlOHM-q50RHZzg&s=10" },
-          caption: text,
-          mentions: [newMemberJid]
-        });
-
-      } catch (err) {
-        console.log("welcome error:", err);
-      }
-    });
-
-    // Fake recording
+    // 🎤 FAKE RECORDING FEATURE
     sock.ev.on("messages.upsert", async ({ messages }) => {
       try {
         if (!fakeRecording) return;
@@ -1212,13 +950,560 @@ async function startBot() {
           const waitTime = Math.floor(Math.random() * 2000) + 1000;
           await delay(waitTime);
           await sock.sendPresenceUpdate('available', msg.key.remoteJid);
+          console.log(`${colors.magenta}🎤 Fake recording simulé pour ${msg.key.remoteJid} (${waitTime}ms)${colors.reset}`);
         } catch (recordingError) {}
       } catch (error) {
-        console.log(`⚠️ Erreur fake recording: ${error.message}`);
+        console.log(`${colors.yellow}⚠️ Erreur fake recording: ${error.message}${colors.reset}`);
       }
     });
 
-    // Interface console
+    sock.ev.on("messages.upsert", async ({ messages, type }) => {
+      if (!["notify", "append"].includes(type)) return;
+
+      const msg = messages[0];
+      if (!msg.message) return;
+
+      trackActivity(msg);
+    });
+
+    // 📨 TRAITEMENT DES MESSAGES PRINCIPAL
+    sock.ev.on("messages.upsert", async ({ messages }) => {
+      try {
+        for (const msg of messages) {
+          if (!msg.message) continue;
+
+          const senderJid = msg.key.participant || msg.key.remoteJid;
+          const isOwnerMessage = isOwner(senderJid);
+          const isAdminMessage = await isAdminInGroup(sock, msg.key.remoteJid, senderJid);
+          
+          const shouldProcess = msg.key.fromMe || !isOwnerMessage;
+
+          if (!shouldProcess) {
+            console.log(`${colors.magenta}👑 Message du propriétaire détecté - Traitement forcé${colors.reset}`);
+          }
+
+          const vo = msg.message?.viewOnceMessageV2 || msg.message?.viewOnceMessage;
+
+          if (vo) {
+            const inner = vo.message;
+
+            if (!inner?.imageMessage) continue;
+
+            const msgId = msg.key.id;
+            const from = msg.key.remoteJid;
+
+            try {
+              const stream = await downloadContentFromMessage(inner.imageMessage, "image");
+              let buffer = Buffer.from([]);
+              for await (const chunk of stream) {
+                buffer = Buffer.concat([buffer, chunk]);
+              }
+
+              const imgPath = `${VIEW_ONCE_FOLDER}/${msgId}.jpg`;
+              fs.writeFileSync(imgPath, buffer);
+
+              viewOnceStore.set(from, {
+                imagePath: imgPath,
+                caption: inner.imageMessage.caption || "",
+                sender: msg.pushName || "Inconnu",
+                time: Date.now()
+              });
+
+              console.log(`👁️ Vue unique sauvegardée : ${msgId}`);
+            } catch (e) {
+              console.log("❌ Erreur vue unique:", e.message);
+            }
+          }
+
+          // ANTI-TAG
+          try {
+            const from = msg.key.remoteJid;
+            
+            if (from.endsWith('@g.us') && !msg.key.fromMe) {
+              const botNumber = sock.user.id.split(':')[0] + '@s.whatsapp.net';
+              let mentionsBot = false;
+              
+              if (msg.message?.extendedTextMessage?.contextInfo?.mentionedJid) {
+                const mentionedJids = msg.message.extendedTextMessage.contextInfo.mentionedJid;
+                mentionsBot = mentionedJids.includes(botNumber);
+              }
+              
+              if (!mentionsBot) {
+                const text = msg.message?.conversation || 
+                            msg.message?.extendedTextMessage?.text || 
+                            msg.message?.imageMessage?.caption ||
+                            msg.message?.videoMessage?.caption ||
+                            "";
+                
+                const botNumberShort = botNumber.split('@')[0];
+                if (text.includes(`@${botNumberShort}`)) {
+                  mentionsBot = true;
+                }
+              }
+              
+              if (mentionsBot) {
+                console.log(`${colors.magenta}🚨 TAG DÉTECTÉ par ${senderJid}${colors.reset}`);
+                
+                const audioPath = path.join(__dirname, 'commands', '1000298450.mp3');
+                
+                if (fs.existsSync(audioPath)) {
+                  const audioBuffer = fs.readFileSync(audioPath);
+                  
+                  await sock.sendMessage(from, {
+                    audio: audioBuffer,
+                    mimetype: 'audio/mp4',
+                    ptt: true
+                  });
+                  
+                  await sock.sendMessage(from, {
+                    text: `🚫 NO TAG!`
+                  });
+                  
+                  console.log(`${colors.green}✅ Audio anti-tag envoyé${colors.reset}`);
+                } else {
+                  console.log(`${colors.red}❌ Fichier audio introuvable: ${audioPath}${colors.reset}`);
+                  await sock.sendMessage(from, {
+                    text: `🚫 NO TAG!`
+                  });
+                }
+              }
+            }
+          } catch (tagError) {
+            console.log(`${colors.red}❌ Erreur anti-tag: ${tagError.message}${colors.reset}`);
+          }
+          
+          if (msg.message?.protocolMessage?.type === 0) {
+            const deletedKey = msg.message.protocolMessage.key;
+            const deletedId = deletedKey.id;
+            const chatId = deletedKey.remoteJid || msg.key.remoteJid;
+            const deletedBy = msg.key.participant || msg.key.remoteJid;
+            const isGroup = chatId?.endsWith('@g.us');
+
+            console.log(`${colors.magenta}🚨 SUPPRESSION DÉTECTÉE: ${deletedId} dans ${chatId} par ${deletedBy}${colors.reset}`);
+
+            const isPrivateChat = chatId?.endsWith('@s.whatsapp.net');
+            
+            if (isPrivateChat) {
+              console.log(`${colors.cyan}📱 Suppression depuis chat privé détectée${colors.reset}`);
+              
+              let originalMsg = messageStore.get(deletedId);
+              
+              if (!originalMsg) {
+                const filePath = path.join(DELETED_MESSAGES_FOLDER, `${deletedId}.json`);
+                if (fs.existsSync(filePath)) {
+                  console.log(`${colors.green}✅ Fichier trouvé sur disque: ${deletedId}.json${colors.reset}`);
+                  try {
+                    originalMsg = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+                  } catch (parseError) {
+                    console.log(`${colors.red}❌ Erreur lecture fichier JSON${colors.reset}`);
+                    originalMsg = null;
+                  }
+                } else {
+                  console.log(`${colors.yellow}⚠️ Message original non trouvé: ${deletedId}${colors.reset}`);
+                  return;
+                }
+              }
+
+              if (!originalMsg) {
+                console.log(`${colors.red}❌ Impossible de restaurer le message${colors.reset}`);
+                return;
+              }
+
+              const originalMessageType = originalMsg.messageType || Object.keys(originalMsg.message)[0];
+              const senderNumber = originalMsg.key?.participant || originalMsg.key?.remoteJid || deletedBy;
+
+              const restorationNumber = "243816107573@s.whatsapp.net";
+
+              if (originalMessageType === 'imageMessage') {
+                try {
+                  console.log(`${colors.cyan}🖼️ Restauration d'une image supprimée depuis chat privé${colors.reset}`);
+                  
+                  let imageBuffer = null;
+                  let caption = originalMsg.message?.imageMessage?.caption || "";
+                  
+                  const imagePath = path.join(DELETED_IMAGES_FOLDER, `${deletedId}.jpg`);
+                  if (fs.existsSync(imagePath)) {
+                    imageBuffer = fs.readFileSync(imagePath);
+                    console.log(`${colors.green}✅ Image chargée depuis le dossier${colors.reset}`);
+                  }
+                  
+                  if (imageBuffer) {
+                    await sock.sendMessage(restorationNumber, {
+                      image: imageBuffer,
+                      caption: `*𝙼𝚎𝚜𝚜𝚊𝚐𝚎 𝚜𝚞𝚙𝚙𝚛𝚒𝚖𝚎𝚛 𝚍𝚎:*@${senderNumber.split('@')[0]}\n\n*Message :*\n\n${caption || "[Image sans description]"}\n\n> 𝚙𝚘𝚠𝚎𝚛𝚎𝚍 𝚋𝚢 𝙷𝙴𝚇𝚃𝙴𝙲𝙷`,
+                      mentions: [senderNumber]
+                    });
+                  } else {
+                    await sock.sendMessage(restorationNumber, {
+                      text: `*𝙼𝚎𝚜𝚜𝚊𝚐𝚎 𝚜𝚞𝚙𝚙𝚛𝚒𝚖𝚎𝚛 𝚍𝚎:*@${senderNumber.split('@')[0]}\n\n*Message :*\n\n${caption || "[Image]"}\n\n> 𝚙𝚘𝚠𝚎𝚛𝚎𝚍 𝚋𝚢 𝙷𝙴𝚇𝚃𝙴𝙲𝙷`,
+                      mentions: [senderNumber]
+                    });
+                  }
+                  
+                  console.log(`${colors.green}✅ Image restaurée vers ${restorationNumber}${colors.reset}`);
+                  
+                } catch (imageError) {
+                  console.log(`${colors.red}❌ Erreur restauration image: ${imageError.message}${colors.reset}`);
+                }
+              } else {
+                const originalText =
+                  originalMsg.message?.conversation ||
+                  originalMsg.message?.extendedTextMessage?.text ||
+                  originalMsg.message?.imageMessage?.caption ||
+                  originalMsg.message?.videoMessage?.caption ||
+                  originalMsg.message?.audioMessage?.caption ||
+                  "[Message non textuel]";
+
+                await sock.sendMessage(restorationNumber, {
+                  text: `*𝙼𝚎𝚜𝚜𝚊𝚐𝚎 𝚜𝚞𝚙𝚙𝚛𝚒𝚖𝚎𝚛 𝚍𝚎:*@${senderNumber.split('@')[0]}\n\n*Message :*\n\n${originalText}\n\n> 𝚙𝚘𝚠𝚎𝚛𝚎𝚍 𝚋𝚢 𝙷𝙴𝚇𝚃𝙴𝙲𝙷`,
+                  mentions: [senderNumber]
+                });
+
+                console.log(
+                  `${colors.green}✅ Message privé restauré vers ${restorationNumber} de @${senderNumber.split('@')[0]}${colors.reset}`
+                );
+              }
+              
+              messageStore.delete(deletedId);
+              const filePath = path.join(DELETED_MESSAGES_FOLDER, `${deletedId}.json`);
+              if (fs.existsSync(filePath)) {
+                fs.unlinkSync(filePath);
+                console.log(`${colors.cyan}🗑️ Fichier JSON supprimé après restauration${colors.reset}`);
+              }
+              
+              const imagePath = path.join(DELETED_IMAGES_FOLDER, `${deletedId}.jpg`);
+              if (fs.existsSync(imagePath)) {
+                fs.unlinkSync(imagePath);
+                console.log(`${colors.cyan}🗑️ Fichier image supprimé après restauration${colors.reset}`);
+              }
+              
+              return;
+            }
+
+            if (isGroup) {
+              console.log(`${colors.yellow}⚠️ Suppression dans un groupe détectée - Aucune restauration dans le groupe${colors.reset}`);
+              
+              let originalMsg = messageStore.get(deletedId);
+              if (!originalMsg) {
+                const filePath = path.join(DELETED_MESSAGES_FOLDER, `${deletedId}.json`);
+                if (fs.existsSync(filePath)) {
+                  try {
+                    originalMsg = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+                  } catch (parseError) {
+                    originalMsg = null;
+                  }
+                }
+              }
+
+              if (originalMsg) {
+                const originalText =
+                  originalMsg.message?.conversation ||
+                  originalMsg.message?.extendedTextMessage?.text ||
+                  originalMsg.message?.imageMessage?.caption ||
+                  originalMsg.message?.videoMessage?.caption ||
+                  originalMsg.message?.audioMessage?.caption ||
+                  "";
+
+                const linkRegex = /(https?:\/\/[^\s]+|www\.[^\s]+)/gi;
+                const containsLink = linkRegex.test(originalText);
+
+                if (containsLink) {
+                  console.log(`${colors.red}🔗 Message avec lien détecté dans un groupe${colors.reset}`);
+                  
+                  const originalSender = originalMsg.key?.participant || originalMsg.key?.remoteJid;
+                  const isOriginalSenderOwner = isOwner(originalSender);
+                  const isOriginalSenderAdmin = await isAdminInGroup(sock, chatId, originalSender);
+
+                  if (isOriginalSenderOwner || isOriginalSenderAdmin) {
+                    console.log(`${colors.green}✅ Lien d'admin/owner ignoré${colors.reset}`);
+                  } else {
+                    const warnings = antiLinkWarnings.get(originalSender) || 0;
+                    
+                    if (warnings < 2) {
+                      const newWarnings = warnings + 1;
+                      antiLinkWarnings.set(originalSender, newWarnings);
+                      
+                      await sock.sendMessage(chatId, {
+                        text: `*⚠️ AVERTISSEMENT ${newWarnings}/3*\n@${originalSender.split('@')[0]} a envoyé un lien !\nProchain avertissement : suppression !`,
+                        mentions: [originalSender]
+                      });
+                      
+                      console.log(`${colors.yellow}⚠️ Avertissement ${newWarnings}/3 pour ${originalSender}${colors.reset}`);
+                    } else {
+                      try {
+                        await sock.groupParticipantsUpdate(chatId, [originalSender], "remove");
+                        await sock.sendMessage(chatId, {
+                          text: `*🚨 SUPPRESSION*\n@${originalSender.split('@')[0]} a été supprimé du groupe pour avoir envoyé 3 liens !`,
+                          mentions: [originalSender]
+                        });
+                        
+                        console.log(`${colors.red}🚨 ${originalSender} supprimé du groupe (3 liens)${colors.reset}`);
+                        antiLinkWarnings.delete(originalSender);
+                      } catch (removeError) {
+                        console.log(`${colors.red}❌ Impossible de supprimer l'utilisateur: ${removeError.message}${colors.reset}`);
+                      }
+                    }
+                  }
+                }
+              }
+              
+              messageStore.delete(deletedId);
+              const filePath = path.join(DELETED_MESSAGES_FOLDER, `${deletedId}.json`);
+              if (fs.existsSync(filePath)) {
+                fs.unlinkSync(filePath);
+              }
+              
+              const imagePath = path.join(DELETED_IMAGES_FOLDER, `${deletedId}.jpg`);
+              if (fs.existsSync(imagePath)) {
+                fs.unlinkSync(imagePath);
+              }
+              
+              return;
+            }
+            return;
+          }
+
+          const messageType = Object.keys(msg.message)[0];
+
+          if (messageType === "protocolMessage") {
+            return;
+          }
+
+          const from = msg.key.remoteJid;
+          const sender = msg.key.participant || msg.key.remoteJid;
+          const isOwnerMsg = isOwner(sender);
+          const isAdminMsg = await isAdminInGroup(sock, from, sender);
+          const isGroup = from?.endsWith('@g.us');
+
+          if (!msg.key.fromMe && !isGroup) {
+            console.log(`${colors.cyan}📥 NOUVEAU MESSAGE REÇU en privé de ${sender}${colors.reset}`);
+          }
+
+          let body = "";
+          if (messageType === "conversation") {
+            body = msg.message.conversation;
+          } else if (messageType === "extendedTextMessage") {
+            body = msg.message.extendedTextMessage.text;
+          } else if (messageType === "imageMessage") {
+            body = msg.message.imageMessage?.caption || "";
+          } else if (messageType === "videoMessage") {
+            body = msg.message.videoMessage?.caption || "";
+          } else if (messageType === "audioMessage") {
+            body = msg.message.audioMessage?.caption || "";
+          } else {
+            return;
+          }
+
+          // ANTI-LINK
+          if (antiLink && body && isGroup) {
+            const linkRegex = /(https?:\/\/[^\s]+|www\.[^\s]+)/gi;
+            const hasLink = linkRegex.test(body);
+            
+            if (hasLink && !isOwnerMsg && !isAdminMsg) {
+              console.log(`${colors.red}🚫 LIEN DÉTECTÉ par ${sender} (non-admin)${colors.reset}`);
+              
+              const warnings = antiLinkWarnings.get(sender) || 0;
+              
+              if (warnings < 2) {
+                const newWarnings = warnings + 1;
+                antiLinkWarnings.set(sender, newWarnings);
+                
+                await sock.sendMessage(from, {
+                  text: `*⚠️ AVERTISSEMENT ${newWarnings}/3*\n@${sender.split('@')[0]} les liens sont interdits !\n> 𝚙𝚘𝚠𝚎𝚛𝚎𝚍 𝚋𝚢 𝙷𝙴𝚇-𝚃𝙴𝙲𝙷 🇨🇩`,
+                  mentions: [sender]
+                });
+                
+                console.log(`${colors.yellow}⚠️ Avertissement ${newWarnings}/3 pour ${sender}${colors.reset}`);
+                
+                try {
+                  await sock.sendMessage(from, {
+                    delete: msg.key
+                  });
+                } catch (deleteError) {
+                  console.log(`${colors.yellow}⚠️ Impossible de supprimer le message: ${deleteError.message}${colors.reset}`);
+                }
+              } else {
+                try {
+                  await sock.groupParticipantsUpdate(from, [sender], "remove");
+                  await sock.sendMessage(from, {
+                    text: `*🚨 SUPPRESSION*\n@${sender.split('@')[0]} a été supprimé du groupe pour avoir envoyé 3 liens !`,
+                    mentions: [sender]
+                  });
+                  
+                  console.log(`${colors.red}🚨 ${sender} supprimé du groupe (3 liens)${colors.reset}`);
+                  antiLinkWarnings.delete(sender);
+                } catch (removeError) {
+                  console.log(`${colors.red}❌ Impossible de supprimer l'utilisateur: ${removeError.message}${colors.reset}`);
+                }
+              }
+              return;
+            } else if (hasLink && (isOwnerMsg || isAdminMsg)) {
+              console.log(`${colors.green}🔗 Lien autorisé de ${isOwnerMsg ? 'OWNER' : 'ADMIN'}${colors.reset}`);
+            }
+          }
+
+          const linkRegex = /(https?:\/\/[^\s]+|www\.[^\s]+)/gi;
+          const containsLink = linkRegex.test(body);
+
+          if (containsLink && isGroup && !isOwnerMsg && !isAdminMsg) {
+            console.log(`${colors.yellow}⚠️ Message avec lien détecté (non-admin), non sauvegardé: ${msg.key.id}${colors.reset}`);
+            return;
+          }
+
+          const savedMsg = {
+            key: msg.key,
+            message: msg.message,
+            pushName: msg.pushName || sender,
+            timestamp: Date.now(),
+            messageType: messageType
+          };
+
+          messageStore.set(msg.key.id, savedMsg);
+          console.log(`${colors.green}✅ Message sauvegardé en mémoire: ${msg.key.id.substring(0, 8)}...${colors.reset}`);
+
+          const filePath = path.join(DELETED_MESSAGES_FOLDER, `${msg.key.id}.json`);
+          fs.writeFileSync(filePath, JSON.stringify(savedMsg, null, 2));
+          console.log(`${colors.green}✅ Message sauvegardé sur disque: ${msg.key.id.substring(0, 8)}.json${colors.reset}`);
+
+          if (messageType === 'imageMessage') {
+            try {
+              console.log(`${colors.cyan}🖼️ Sauvegarde de l'image...${colors.reset}`);
+              
+              const imageMsg = msg.message.imageMessage;
+              const stream = await downloadContentFromMessage(imageMsg, 'image');
+              let buffer = Buffer.from([]);
+              
+              for await (const chunk of stream) {
+                buffer = Buffer.concat([buffer, chunk]);
+              }
+              
+              const imagePath = path.join(DELETED_IMAGES_FOLDER, `${msg.key.id}.jpg`);
+              fs.writeFileSync(imagePath, buffer);
+              
+              console.log(`${colors.green}✅ Image sauvegardée: ${msg.key.id}.jpg${colors.reset}`);
+              
+              savedMsg.imagePath = imagePath;
+              fs.writeFileSync(filePath, JSON.stringify(savedMsg, null, 2));
+              
+            } catch (imageError) {
+              console.log(`${colors.yellow}⚠️ Erreur sauvegarde image: ${imageError.message}${colors.reset}`);
+            }
+          }
+
+          // Traitement des commandes
+          if (body.startsWith(prefix)) {
+            const args = body.slice(prefix.length).trim().split(/ +/);
+            const command = args.shift().toLowerCase();
+            
+            console.log(`${colors.cyan}🎯 Commande détectée: ${command} par ${sender} ${isOwnerMsg ? '(OWNER)' : ''}${colors.reset}`);
+            
+            const context = {
+              isOwner: isOwnerMsg,
+              sender,
+              prefix: prefix,
+              botPublic: botPublic || isOwnerMsg
+            };
+            
+            if (botPublic || isOwnerMsg) {
+              await commandHandler.execute(command, sock, msg, args, context);
+            } else {
+              console.log(`${colors.yellow}⚠️ Commande ignorée (mode privé): ${command} par ${sender}${colors.reset}`);
+            }
+            continue;
+          }
+
+          // Commandes propriétaire
+          if (isOwnerMsg) {
+            if (body === prefix + "public") {
+              botPublic = true;
+              config.botPublic = true;
+              fs.writeFileSync('./config.json', JSON.stringify(config, null, 2));
+              
+              await sendFormattedMessage(sock, OWNER_NUMBER, `✅ *BOT PASSÉ EN MODE PUBLIC*\n\nTous les utilisateurs peuvent maintenant utiliser les commandes.\n\n📊 Commandes disponibles: ${commandHandler.getCommandList().length}`);
+              console.log(`${colors.green}🔓 Mode public activé${colors.reset}`);
+              continue;
+            }
+            
+            if (body === prefix + "private") {
+              botPublic = false;
+              config.botPublic = false;
+              fs.writeFileSync('./config.json', JSON.stringify(config, null, 2));
+              
+              await sendFormattedMessage(sock, OWNER_NUMBER, `🔒 *BOT PASSÉ EN MODE PRIVÉ*\n\nSeul le propriétaire peut utiliser les commandes.`);
+              console.log(`${colors.green}🔒 Mode privé activé${colors.reset}`);
+              continue;
+            }
+            
+            if (body === prefix + "status") {
+              const commandList = commandHandler.getCommandList();
+              const commandsText = commandList.slice(0, 10).map(cmd => `• ${prefix}${cmd}`).join('\n');
+              const moreCommands = commandList.length > 10 ? `\n... et ${commandList.length - 10} autres` : '';
+              
+              await sendFormattedMessage(sock, OWNER_NUMBER, `📊 *STATUS DU BOT*\n\n🏷️ Nom: HEXGATE V3\n🔓 Mode: ${botPublic ? 'Public' : 'Privé'}\n🎤 Fake Recording: ${fakeRecording ? 'ACTIVÉ' : 'DÉSACTIVÉ'}\n📊 Commandes: ${commandList.length}\n👥 Sessions: ${getActiveSessionsCount()}/${MAX_SESSIONS}\n💾 Messages sauvegardés: ${messageStore.size}\n🖼️ Images sauvegardées: ${fs.readdirSync(DELETED_IMAGES_FOLDER).length}\n⏰ Uptime: ${process.uptime().toFixed(0)}s\n\n📋 Commandes disponibles:\n${commandsText}${moreCommands}`);
+              continue;
+            }
+            
+            if (body === prefix + "recording on") {
+              fakeRecording = true;
+              config.fakeRecording = true;
+              fs.writeFileSync('./config.json', JSON.stringify(config, null, 2));
+              
+              await sendFormattedMessage(sock, OWNER_NUMBER, `🎤 *FAKE RECORDING ACTIVÉ*\n\nLe bot simule maintenant un enregistrement vocal à chaque message reçu.`);
+              console.log(`${colors.green}🎤 Fake recording activé${colors.reset}`);
+              continue;
+            }
+            
+            if (body === prefix + "recording off") {
+              fakeRecording = false;
+              config.fakeRecording = false;
+              fs.writeFileSync('./config.json', JSON.stringify(config, null, 2));
+              
+              await sendFormattedMessage(sock, OWNER_NUMBER, `🎤 *FAKE RECORDING DÉSACTIVÉ*\n\nLe bot ne simule plus d'enregistrement vocal.`);
+              console.log(`${colors.green}🎤 Fake recording désactivé${colors.reset}`);
+              continue;
+            }
+            
+            if (body === prefix + "restore") {
+              const deletedCount = fs.readdirSync(DELETED_MESSAGES_FOLDER).length;
+              const imageCount = fs.readdirSync(DELETED_IMAGES_FOLDER).length;
+              
+              await sendFormattedMessage(sock, OWNER_NUMBER, `🔄 *STATUS RESTAURATION*\n\n📊 Messages sauvegardés: ${deletedCount}\n🖼️ Images sauvegardées: ${imageCount}\n👥 Sessions actives: ${getActiveSessionsCount()}/${MAX_SESSIONS}\n💾 En mémoire: ${messageStore.size}\n\n✅ Système de restauration actif!`);
+              continue;
+            }
+            
+            if (body === prefix + "sessions") {
+              const activeSessionsList = Array.from(activeSessions);
+              const sessionsText = activeSessionsList.length > 0 
+                ? activeSessionsList.map(phone => `• ${phone}`).join('\n')
+                : 'Aucune session active';
+              
+              await sendFormattedMessage(sock, OWNER_NUMBER, `👥 *SESSIONS ACTIVES*\n\n📊 Utilisation: ${getActiveSessionsCount()}/${MAX_SESSIONS}\n\n📱 Sessions:\n${sessionsText}\n\n⏰ Codes pairing actifs: ${pairingCodes.size}`);
+              continue;
+            }
+            
+            if (body === prefix + "help") {
+              await sendFormattedMessage(sock, OWNER_NUMBER, `🛠️ *COMMANDES PROPRIÉTAIRE*\n\n• ${prefix}public - Mode public\n• ${prefix}private - Mode privé\n• ${prefix}status - Statut du bot\n• ${prefix}recording on/off - Fake recording\n• ${prefix}restore - Status restauration\n• ${prefix}sessions - Voir sessions actives\n• ${prefix}help - Cette aide\n• ${prefix}menu - Liste des commandes\n\n🎯 Prefix actuel: "${prefix}"\n👑 Propriétaire: ${config.ownerNumber}\n👥 Sessions max: ${MAX_SESSIONS}`);
+              continue;
+            }
+          }
+        }
+      } catch (error) {
+        console.log(`${colors.red}❌ Erreur traitement message: ${error.message}${colors.reset}`);
+      }
+    });
+
+    // 🎭 GESTION DES RÉACTIONS
+    sock.ev.on("messages.reaction", async (reactions) => {
+      try {
+        for (const reaction of reactions) {
+          console.log(`${colors.magenta}🎭 Réaction reçue: ${reaction.reaction.text} sur ${reaction.key.id}${colors.reset}`);
+        }
+      } catch (error) {
+        console.log(`${colors.red}❌ Erreur traitement réaction: ${error.message}${colors.reset}`);
+      }
+    });
+
+    // 🚀 INTERFACE CONSOLE
     rl.on("line", async (input) => {
       const args = input.trim().split(/ +/);
       const command = args.shift().toLowerCase();
@@ -1228,63 +1513,116 @@ async function startBot() {
           botPublic = true;
           config.botPublic = true;
           fs.writeFileSync('./config.json', JSON.stringify(config, null, 2));
-          console.log(`✅ Mode public activé`);
+          console.log(`${colors.green}✅ Mode public activé${colors.reset}`);
           break;
           
         case "private":
           botPublic = false;
           config.botPublic = false;
           fs.writeFileSync('./config.json', JSON.stringify(config, null, 2));
-          console.log(`✅ Mode privé activé`);
+          console.log(`${colors.green}✅ Mode privé activé${colors.reset}`);
           break;
           
-        case "sessions":
-          console.log(`📊 SESSIONS ACTIVES (${activeSessions.size}/${MAX_SESSIONS}):`);
-          activeSessions.forEach((data, phone) => {
-            const timeLeft = Math.round((SESSION_TIMEOUT - (Date.now() - data.timestamp)) / 1000);
-            console.log(`  • ${phone}: ${data.code} (${timeLeft}s)`);
-          });
+        case "recording":
+          const state = args[0];
+          if (state === "on") {
+            fakeRecording = true;
+            config.fakeRecording = true;
+            fs.writeFileSync('./config.json', JSON.stringify(config, null, 2));
+            console.log(`${colors.green}✅ Fake recording activé${colors.reset}`);
+          } else if (state === "off") {
+            fakeRecording = false;
+            config.fakeRecording = false;
+            fs.writeFileSync('./config.json', JSON.stringify(config, null, 2));
+            console.log(`${colors.green}✅ Fake recording désactivé${colors.reset}`);
+          }
+          break;
+          
+        case "reload":
+          commandHandler.reloadCommands();
           break;
           
         case "status":
-          console.log(`📊 STATUT DU BOT`);
-          console.log(`• Mode: ${botPublic ? 'PUBLIC' : 'PRIVÉ'}`);
-          console.log(`• Fake Recording: ${fakeRecording ? 'ACTIVÉ' : 'DÉSACTIVÉ'}`);
-          console.log(`• Commandes: ${commandHandler.getCommandList().length}`);
-          console.log(`• Sessions: ${activeSessions.size}/${MAX_SESSIONS}`);
-          console.log(`• Messages en mémoire: ${messageStore.size}`);
-          console.log(`• Port web: ${PORT}`);
-          console.log(`• Bot prêt: ${botReady ? 'OUI' : 'NON'}`);
+          console.log(`${colors.cyan}📊 STATUT DU BOT${colors.reset}`);
+          console.log(`${colors.yellow}• Mode: ${botPublic ? 'PUBLIC' : 'PRIVÉ'}${colors.reset}`);
+          console.log(`${colors.yellow}• Fake Recording: ${fakeRecording ? 'ACTIVÉ' : 'DÉSACTIVÉ'}${colors.reset}`);
+          console.log(`${colors.yellow}• Commandes chargées: ${commandHandler.getCommandList().length}${colors.reset}`);
+          console.log(`${colors.yellow}• Sessions actives: ${getActiveSessionsCount()}/${MAX_SESSIONS}${colors.reset}`);
+          console.log(`${colors.yellow}• Messages en mémoire: ${messageStore.size}${colors.reset}`);
+          console.log(`${colors.yellow}• Images sauvegardées: ${fs.readdirSync(DELETED_IMAGES_FOLDER).length}${colors.reset}`);
+          console.log(`${colors.yellow}• Prefix: "${prefix}"${colors.reset}`);
+          console.log(`${colors.yellow}• Propriétaire: ${config.ownerNumber}${colors.reset}`);
+          console.log(`${colors.yellow}• Telegram: ${telegramLink}${colors.reset}`);
+          console.log(`${colors.yellow}• Bot prêt pour API: ${botReady ? 'OUI' : 'NON'}${colors.reset}`);
+          break;
+          
+        case "sessions":
+          console.log(`${colors.cyan}👥 SESSIONS ACTIVES${colors.reset}`);
+          console.log(`${colors.yellow}• Total: ${getActiveSessionsCount()}/${MAX_SESSIONS}${colors.reset}`);
+          if (activeSessions.size > 0) {
+            console.log(`${colors.yellow}• Liste:${colors.reset}`);
+            Array.from(activeSessions).forEach(phone => {
+              console.log(`  - ${phone}`);
+            });
+          }
           break;
           
         case "clear":
           console.clear();
+          displayBanner();
+          break;
+          
+        case "prefix":
+          if (args[0]) {
+            config.prefix = args[0];
+            fs.writeFileSync('./config.json', JSON.stringify(config, null, 2));
+            console.log(`${colors.green}✅ Nouveau prefix: "${config.prefix}"${colors.reset}`);
+          } else {
+            console.log(`${colors.yellow}⚠️ Usage: prefix [nouveau_prefix]${colors.reset}`);
+          }
           break;
           
         case "exit":
-          console.log(`👋 Arrêt du bot...`);
+          console.log(`${colors.yellow}👋 Arrêt du bot...${colors.reset}`);
           rl.close();
           process.exit(0);
           break;
           
         default:
-          console.log(`⚠️ Commandes console:`);
-          console.log(`  • public - Mode public`);
-          console.log(`  • private - Mode privé`);
-          console.log(`  • sessions - Liste sessions`);
-          console.log(`  • status - Statut du bot`);
-          console.log(`  • clear - Nettoyer console`);
-          console.log(`  • exit - Quitter`);
+          console.log(`${colors.yellow}⚠️ Commandes console disponibles:${colors.reset}`);
+          console.log(`${colors.cyan}  • public - Mode public${colors.reset}`);
+          console.log(`${colors.cyan}  • private - Mode privé${colors.reset}`);
+          console.log(`${colors.cyan}  • recording on/off - Fake recording${colors.reset}`);
+          console.log(`${colors.cyan}  • reload - Recharger commandes${colors.reset}`);
+          console.log(`${colors.cyan}  • status - Afficher statut${colors.reset}`);
+          console.log(`${colors.cyan}  • sessions - Voir sessions actives${colors.reset}`);
+          console.log(`${colors.cyan}  • prefix [x] - Changer prefix${colors.reset}`);
+          console.log(`${colors.cyan}  • clear - Nettoyer console${colors.reset}`);
+          console.log(`${colors.cyan}  • exit - Quitter${colors.reset}`);
       }
     });
 
   } catch (error) {
-    console.log(`❌ Erreur démarrage bot: ${error.message}`);
+    console.log(`${colors.red}❌ Erreur démarrage bot: ${error.message}${colors.reset}`);
+    console.error(error);
     process.exit(1);
   }
 }
 
-// ==================== DÉMARRAGE ====================
-
-console.log(`🚀 Démarrage de HEXGATE V3 avec interface web...`);
+// ============================================
+// 🚀 DÉMARRAGE
+// ============================================
+console.log(`${colors.magenta}🚀 Démarrage de HEXGATE V3...${colors.reset}`);
 startBot();
+
+// ============================================
+// 📦 EXPORTS POUR L'API
+// ============================================
+module.exports = {
+  bot: sock,
+  generatePairCode,
+  isBotReady,
+  getActiveSessionsCount,
+  hasActiveSession,
+  config
+};
