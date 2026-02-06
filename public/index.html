@@ -155,7 +155,7 @@
             border-color: #667eea;
         }
 
-        .country-code {
+        .country-selector {
             background: #f8f9fa;
             padding: 15px;
             display: flex;
@@ -164,6 +164,17 @@
             color: #333;
             font-weight: bold;
             border-right: 2px solid #ddd;
+            min-width: 120px;
+        }
+
+        .country-selector select {
+            background: transparent;
+            border: none;
+            outline: none;
+            font-weight: bold;
+            color: #333;
+            width: 100%;
+            cursor: pointer;
         }
 
         input {
@@ -346,6 +357,19 @@
             margin-top: 5px;
         }
 
+        .examples {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 12px;
+            margin-top: 10px;
+            font-size: 12px;
+            color: #666;
+        }
+
+        .examples strong {
+            color: #333;
+        }
+
         @media (max-width: 600px) {
             .container {
                 padding: 20px;
@@ -363,6 +387,15 @@
             
             .copy-btn {
                 width: 100%;
+            }
+            
+            .country-selector {
+                min-width: 100px;
+                padding: 10px;
+            }
+            
+            .country-selector select {
+                font-size: 14px;
             }
         }
     </style>
@@ -393,22 +426,73 @@
         <div class="card">
             <h2><i class="fas fa-qrcode"></i> Générer un Code Pair</h2>
             <p class="instruction">
-                Entrez votre numéro WhatsApp avec l'indicatif pays (ex: 243XXXXXXXXX)
+                Sélectionnez votre pays et entrez votre numéro WhatsApp
             </p>
             
             <form id="pairForm">
                 <div class="input-group">
-                    <div class="country-code">
-                        <i class="fas fa-flag"></i>
-                        <span>+243</span>
+                    <div class="country-selector">
+                        <i class="fas fa-globe"></i>
+                        <select id="countryCode">
+                            <option value="243">🇨🇩 +243 RDC</option>
+                            <option value="33">🇫🇷 +33 France</option>
+                            <option value="1">🇺🇸 +1 USA/Canada</option>
+                            <option value="237">🇨🇲 +237 Cameroun</option>
+                            <option value="225">🇨🇮 +225 Côte d'Ivoire</option>
+                            <option value="229">🇧🇯 +229 Bénin</option>
+                            <option value="226">🇧🇫 +226 Burkina Faso</option>
+                            <option value="228">🇹🇬 +228 Togo</option>
+                            <option value="212">🇲🇦 +212 Maroc</option>
+                            <option value="213">🇩🇿 +213 Algérie</option>
+                            <option value="216">🇹🇳 +216 Tunisie</option>
+                            <option value="221">🇸🇳 +221 Sénégal</option>
+                            <option value="223">🇲🇱 +223 Mali</option>
+                            <option value="224">🇬🇳 +224 Guinée</option>
+                            <option value="227">🇳🇪 +227 Niger</option>
+                            <option value="234">🇳🇬 +234 Nigeria</option>
+                            <option value="254">🇰🇪 +254 Kenya</option>
+                            <option value="256">🇺🇬 +256 Ouganda</option>
+                            <option value="255">🇹🇿 +255 Tanzanie</option>
+                            <option value="250">🇷🇼 +250 Rwanda</option>
+                            <option value="257">🇧🇮 +257 Burundi</option>
+                            <option value="244">🇦🇴 +244 Angola</option>
+                            <option value="258">🇲🇿 +258 Mozambique</option>
+                            <option value="260">🇿🇲 +260 Zambie</option>
+                            <option value="263">🇿🇼 +263 Zimbabwe</option>
+                            <option value="27">🇿🇦 +27 Afrique du Sud</option>
+                            <option value="20">🇪🇬 +20 Égypte</option>
+                            <option value="234">🇳🇬 +234 Nigeria</option>
+                            <option value="351">🇵🇹 +351 Portugal</option>
+                            <option value="34">🇪🇸 +34 Espagne</option>
+                            <option value="39">🇮🇹 +39 Italie</option>
+                            <option value="44">🇬🇧 +44 Royaume-Uni</option>
+                            <option value="49">🇩🇪 +49 Allemagne</option>
+                            <option value="7">🇷🇺 +7 Russie</option>
+                            <option value="86">🇨🇳 +86 Chine</option>
+                            <option value="91">🇮🇳 +91 Inde</option>
+                            <option value="62">🇮🇩 +62 Indonésie</option>
+                            <option value="55">🇧🇷 +55 Brésil</option>
+                            <option value="52">🇲🇽 +52 Mexique</option>
+                            <option value="54">🇦🇷 +54 Argentine</option>
+                            <option value="57">🇨🇴 +57 Colombie</option>
+                            <option value="51">🇵🇪 +51 Pérou</option>
+                            <option value="56">🇨🇱 +56 Chili</option>
+                        </select>
                     </div>
                     <input 
                         type="tel" 
                         id="phoneNumber" 
-                        placeholder="Votre numéro WhatsApp"
+                        placeholder="Numéro (sans indicatif)"
                         required
-                        pattern="[0-9]{9,}"
-                        title="Entrez votre numéro sans l'indicatif">
+                        pattern="[0-9]{7,}"
+                        title="Entrez votre numéro local (sans indicatif pays)">
+                </div>
+                
+                <div class="examples">
+                    <strong>Exemples :</strong><br>
+                    • RDC: <strong>81 000 0000</strong> → <strong>243810000000</strong><br>
+                    • France: <strong>6 12 34 56 78</strong> → <strong>33612345678</strong><br>
+                    • USA: <strong>555 123 4567</strong> → <strong>15551234567</strong>
                 </div>
                 
                 <button type="submit" id="generateBtn">
@@ -444,6 +528,7 @@
             <div class="error" id="errorContainer" style="display: none;">
                 <h3><i class="fas fa-exclamation-triangle"></i> Erreur</h3>
                 <p id="errorMessage"></p>
+                <div id="errorDetails" style="font-size: 12px; color: #666; margin-top: 10px; display: none;"></div>
             </div>
         </div>
         
@@ -455,6 +540,7 @@
                 <li><i class="fas fa-sync-alt"></i> Une seule session par numéro</li>
                 <li><i class="fas fa-robot"></i> Bot maintenu par HEX-TECH</li>
                 <li><i class="fas fa-users"></i> Limite : 10 utilisateurs simultanés</li>
+                <li><i class="fas fa-globe"></i> Support multi-pays</li>
             </ul>
         </div>
         
@@ -468,24 +554,27 @@
         </footer>
     </div>
     
- <script>
+<script>
     document.addEventListener('DOMContentLoaded', function() {
         // Éléments DOM
         const statusDot = document.getElementById('statusDot');
         const statusText = document.getElementById('statusText');
         const botStatus = document.getElementById('botStatus');
         const pairForm = document.getElementById('pairForm');
+        const countryCodeSelect = document.getElementById('countryCode');
         const phoneInput = document.getElementById('phoneNumber');
         const generateBtn = document.getElementById('generateBtn');
         const resultContainer = document.getElementById('resultContainer');
         const errorContainer = document.getElementById('errorContainer');
+        const errorMessage = document.getElementById('errorMessage');
+        const errorDetails = document.getElementById('errorDetails');
         const pairCode = document.getElementById('pairCode');
         const displayCode = document.getElementById('displayCode');
         const copyBtn = document.getElementById('copyBtn');
         const countdown = document.getElementById('countdown');
         const timerContainer = document.getElementById('timerContainer');
         
-        // URL de l'API - IMPORTANT: utiliser l'URL actuelle
+        // URL de l'API
         const API_BASE_URL = window.location.origin;
         console.log('🌍 API Base URL:', API_BASE_URL);
         
@@ -527,25 +616,25 @@
         }
         
         // Générer un code pair
-        async function generatePairCode(phoneNumber) {
-            console.log('🔢 Génération du code pour:', phoneNumber);
+        async function generatePairCode(countryCode, localNumber) {
+            console.log('🔢 Génération du code pour:', countryCode, localNumber);
             
             // Formater le numéro
-            let formattedPhone = phoneNumber.replace(/\D/g, '');
+            let formattedPhone = localNumber.replace(/\D/g, '');
             
-            // Ajouter l'indicatif RDC si absent
-            if (!formattedPhone.startsWith('243')) {
-                formattedPhone = '243' + formattedPhone;
-            }
+            // Combiner l'indicatif pays avec le numéro local
+            const fullNumber = countryCode + formattedPhone;
+            
+            console.log('📱 Numéro complet:', fullNumber);
             
             // Vérifier la longueur
-            if (formattedPhone.length < 12) {
-                showError('Numéro invalide. Format: 243XXXXXXXXX (12 chiffres minimum)');
+            if (fullNumber.length < 10) {
+                showError('Numéro trop court. Minimum 10 chiffres au total');
                 return;
             }
             
-            if (formattedPhone.length > 15) {
-                showError('Numéro trop long. Format: 243XXXXXXXXX');
+            if (fullNumber.length > 15) {
+                showError('Numéro trop long. Maximum 15 chiffres au total');
                 return;
             }
             
@@ -562,7 +651,7 @@
                     headers: {
                         'Content-Type': 'application/json',
                     },
-                    body: JSON.stringify({ phone: formattedPhone })
+                    body: JSON.stringify({ phone: fullNumber })
                 });
                 
                 console.log('📥 Réponse reçue, statut:', response.status);
@@ -574,7 +663,27 @@
                     // Afficher le résultat
                     showResult(data.code);
                 } else {
-                    throw new Error(data.error || 'Erreur inconnue');
+                    // Afficher l'erreur avec détails
+                    let errorMsg = data.error || 'Erreur inconnue';
+                    if (data.details) {
+                        errorDetails.textContent = `Détails: ${data.details}`;
+                        errorDetails.style.display = 'block';
+                    } else {
+                        errorDetails.style.display = 'none';
+                    }
+                    
+                    // Messages d'erreur spécifiques
+                    if (errorMsg.includes('Connection Closed')) {
+                        errorMsg = 'Connexion refusée par WhatsApp. Veuillez réessayer dans quelques minutes.';
+                    } else if (errorMsg.includes('timeout')) {
+                        errorMsg = 'Timeout de connexion. Vérifiez votre connexion internet.';
+                    } else if (errorMsg.includes('rate limit') || errorMsg.includes('trop de tentatives')) {
+                        errorMsg = 'Trop de tentatives. Veuillez patienter quelques minutes.';
+                    } else if (errorMsg.includes('Numéro invalide')) {
+                        errorMsg = 'Numéro invalide. Vérifiez le format de votre numéro.';
+                    }
+                    
+                    throw new Error(errorMsg);
                 }
                 
             } catch (error) {
@@ -592,6 +701,7 @@
             
             resultContainer.style.display = 'block';
             errorContainer.style.display = 'none';
+            errorDetails.style.display = 'none';
             pairCode.textContent = code;
             displayCode.textContent = code;
             
@@ -608,7 +718,7 @@
             
             errorContainer.style.display = 'block';
             resultContainer.style.display = 'none';
-            document.getElementById('errorMessage').textContent = message;
+            errorMessage.textContent = message;
             
             // Faire défiler jusqu'à l'erreur
             errorContainer.scrollIntoView({ behavior: 'smooth' });
@@ -689,35 +799,81 @@
         pairForm.addEventListener('submit', function(e) {
             e.preventDefault();
             
-            const phone = phoneInput.value.trim();
+            const countryCode = countryCodeSelect.value;
+            const localNumber = phoneInput.value.trim();
             
-            if (!phone) {
-                showError('Veuillez entrer un numéro');
+            if (!localNumber) {
+                showError('Veuillez entrer votre numéro local');
                 return;
             }
             
-            if (!/^\d{9,}$/.test(phone)) {
-                showError('Veuillez entrer un numéro valide (9 chiffres minimum)');
+            // Validation basique du numéro local
+            const cleanLocalNumber = localNumber.replace(/\D/g, '');
+            if (cleanLocalNumber.length < 7) {
+                showError('Numéro local trop court (minimum 7 chiffres)');
                 return;
             }
             
-            generatePairCode(phone);
+            if (cleanLocalNumber.length > 12) {
+                showError('Numéro local trop long (maximum 12 chiffres)');
+                return;
+            }
+            
+            generatePairCode(countryCode, cleanLocalNumber);
         });
         
         // Formatage automatique du numéro
         phoneInput.addEventListener('input', function(e) {
             let value = e.target.value.replace(/\D/g, '');
+            
+            // Ajouter des espaces pour la lisibilité (optionnel)
+            if (value.length > 3 && value.length <= 6) {
+                value = value.slice(0, 3) + ' ' + value.slice(3);
+            } else if (value.length > 6) {
+                value = value.slice(0, 3) + ' ' + value.slice(3, 6) + ' ' + value.slice(6, 10);
+            }
+            
             e.target.value = value;
         });
         
         // Validation en temps réel
         phoneInput.addEventListener('blur', function() {
-            const phone = phoneInput.value.trim();
-            if (phone && !/^\d{9,}$/.test(phone)) {
+            const localNumber = phoneInput.value.replace(/\D/g, '');
+            if (localNumber && localNumber.length < 7) {
                 phoneInput.style.borderColor = '#dc3545';
             } else {
                 phoneInput.style.borderColor = '';
             }
+        });
+        
+        // Afficher l'exemple basé sur le pays sélectionné
+        countryCodeSelect.addEventListener('change', function() {
+            const examples = document.querySelector('.examples');
+            const countryCode = this.value;
+            
+            let exampleText = '<strong>Exemples :</strong><br>';
+            
+            switch(countryCode) {
+                case '243':
+                    exampleText += '• RDC: <strong>81 000 0000</strong> → <strong>243810000000</strong>';
+                    break;
+                case '33':
+                    exampleText += '• France: <strong>6 12 34 56 78</strong> → <strong>33612345678</strong>';
+                    break;
+                case '1':
+                    exampleText += '• USA/Canada: <strong>555 123 4567</strong> → <strong>15551234567</strong>';
+                    break;
+                case '237':
+                    exampleText += '• Cameroun: <strong>6 00 00 00 00</strong> → <strong>237600000000</strong>';
+                    break;
+                case '225':
+                    exampleText += '• Côte d\'Ivoire: <strong>07 00 00 00 00</strong> → <strong>2250700000000</strong>';
+                    break;
+                default:
+                    exampleText += '• Exemple: <strong>123456789</strong> → <strong>' + countryCode + '123456789</strong>';
+            }
+            
+            examples.innerHTML = exampleText;
         });
         
         // Focus sur le champ de numéro au chargement
@@ -742,6 +898,9 @@
         console.log('✅ Interface HEXGATE V2 chargée avec succès');
         console.log('🌐 URL actuelle:', window.location.href);
         console.log('🔌 API URL:', API_BASE_URL);
+        
+        // Déclencher l'événement change pour afficher l'exemple initial
+        countryCodeSelect.dispatchEvent(new Event('change'));
     });
 </script>
 </body>
