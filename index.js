@@ -19,7 +19,7 @@ const OWNER_NUMBER = "243816107573@s.whatsapp.net"
 
 // Dossier de sessions adapté selon l'environnement
 const SESSIONS_DIR = process.env.RENDER
-  ? path.join(os.tmpdir(), "sessions")  // Utilise le dossier temp sur Render
+  ? path.join(os.tmpdir(), "sessions")
   : path.join(__dirname, "sessions")
 
 const COMMANDS_DIR = path.join(__dirname, "commands")
@@ -28,9 +28,24 @@ let botReady = false
 let activeSockets = {}
 
 // ================== MIDDLEWARE ==================
-app.use(cors())
+// Important: CORS doit être configuré correctement
+app.use(cors({
+  origin: '*', // Permettre toutes les origines (à restreindre en production)
+  methods: ['GET', 'POST'],
+  credentials: true
+}))
+
 app.use(express.json())
-app.use(express.static("public"))
+app.use(express.urlencoded({ extended: true }))
+
+// Servir les fichiers statiques depuis le dossier 'public'
+const PUBLIC_DIR = path.join(__dirname, "public")
+if (!fs.existsSync(PUBLIC_DIR)) {
+  fs.mkdirSync(PUBLIC_DIR, { recursive: true })
+  console.log(`📁 Dossier public créé : ${PUBLIC_DIR}`)
+}
+
+app.use(express.static(PUBLIC_DIR))
 
 // Vérifier et créer le dossier de sessions
 if (!fs.existsSync(SESSIONS_DIR)) {
@@ -39,7 +54,6 @@ if (!fs.existsSync(SESSIONS_DIR)) {
     console.log(`📁 Dossier de sessions créé : ${SESSIONS_DIR}`)
   } catch (err) {
     console.error(`❌ Erreur création dossier sessions: ${err.message}`)
-    // Fallback sur le dossier courant si erreur
     const fallbackDir = path.join(__dirname, "sessions")
     if (!fs.existsSync(fallbackDir)) {
       fs.mkdirSync(fallbackDir, { recursive: true })
@@ -47,10 +61,15 @@ if (!fs.existsSync(SESSIONS_DIR)) {
   }
 }
 
+// Créer le dossier commands s'il n'existe pas
+if (!fs.existsSync(COMMANDS_DIR)) {
+  fs.mkdirSync(COMMANDS_DIR, { recursive: true })
+  console.log(`📁 Dossier commands créé : ${COMMANDS_DIR}`)
+}
+
 // ================== COMMANDS LOADER ==================
 const commands = new Map()
 
-// Charger les commandes
 function loadCommands() {
   commands.clear()
   
@@ -60,7 +79,32 @@ function loadCommands() {
     
     if (files.length === 0) {
       console.log("📁 Aucune commande trouvée dans le dossier 'commands'")
-      return
+      
+      // Créer une commande ping par défaut
+      const defaultPing = path.join(COMMANDS_DIR, "ping.js")
+      if (!fs.existsSync(defaultPing)) {
+        const pingCode = `
+module.exports = {
+  name: "ping",
+  description: "Vérifie si le bot est actif",
+  
+  async execute(sock, msg, args) {
+    const jid = msg.key.remoteJid
+    
+    await sock.sendMessage(jid, {
+      text: "🏓 Pong! HEXGATE est actif et fonctionnel!\\n\\n" +
+            "🕒 " + new Date().toLocaleString() + "\\n" +
+            "📱 Utilisez .help pour voir toutes les commandes"
+    })
+  }
+}
+        `
+        fs.writeFileSync(defaultPing, pingCode)
+        console.log("✅ Commande ping créée par défaut")
+      }
+      
+      // Recharger après création
+      files.push("ping.js")
     }
     
     files.forEach(file => {
@@ -81,46 +125,101 @@ function loadCommands() {
     })
     
     console.log(`📊 Total commandes chargées : ${commands.size}`)
-  } else {
-    console.log("📁 Dossier 'commands' non trouvé, création...")
-    fs.mkdirSync(COMMANDS_DIR, { recursive: true })
   }
 }
 
 // Charger les commandes au démarrage
 loadCommands()
 
-// ================== BOT STATUS ==================
-app.get("/api/bot-status", (req, res) => {
-  res.json({
-    ready: botReady,
-    sessions: Object.keys(activeSockets).length,
-    commands: Array.from(commands.keys()),
-    sessionsDir: SESSIONS_DIR
-  })
+// ================== ROUTES ==================
+
+// Route racine - servir l'index.html
+app.get("/", (req, res) => {
+  const indexPath = path.join(PUBLIC_DIR, "index.html")
+  if (fs.existsSync(indexPath)) {
+    res.sendFile(indexPath)
+  } else {
+    // Si index.html n'existe pas, créer un fichier par défaut
+    const defaultHTML = `
+<!DOCTYPE html>
+<html>
+<head>
+    <title>HEXGATE WhatsApp Bot</title>
+    <style>
+        body { font-family: Arial; padding: 40px; text-align: center; }
+        .status { padding: 20px; background: #f0f0f0; border-radius: 10px; margin: 20px; }
+    </style>
+</head>
+<body>
+    <h1>🤖 HEXGATE V2</h1>
+    <div class="status">
+        <p>Le bot est en ligne</p>
+        <p>Session active: ${Object.keys(activeSockets).length}</p>
+    </div>
+    <p>Téléchargez l'interface complète depuis: <a href="https://github.com/hextech/hexgate">GitHub</a></p>
+</body>
+</html>
+    `
+    res.send(defaultHTML)
+  }
 })
 
-// ================== GENERATE PAIR CODE ==================
+// ================== BOT STATUS API ==================
+app.get("/api/bot-status", (req, res) => {
+  try {
+    res.json({
+      success: true,
+      ready: botReady,
+      sessions: Object.keys(activeSockets).length,
+      commands: Array.from(commands.keys()),
+      timestamp: new Date().toISOString(),
+      version: "HEXGATE V2.0"
+    })
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error.message
+    })
+  }
+})
+
+// ================== GENERATE PAIR CODE API ==================
 app.post("/api/generate-pair-code", async (req, res) => {
+  console.log("📱 Requête reçue pour générer un code pair:", req.body)
+  
   try {
     let phone = req.body.phone
     if (!phone) {
-      return res.status(400).json({ success: false, error: "Numéro manquant" })
+      return res.status(400).json({ 
+        success: false, 
+        error: "Numéro manquant" 
+      })
     }
 
     // Nettoyer le numéro
     phone = phone.replace(/\D/g, "")
     if (!phone) {
-      return res.status(400).json({ success: false, error: "Numéro invalide" })
+      return res.status(400).json({ 
+        success: false, 
+        error: "Numéro invalide" 
+      })
     }
 
     // Ajouter l'indicatif pays si manquant
-    if (!phone.startsWith("243") && !phone.startsWith("+")) {
+    if (!phone.startsWith("243")) {
       phone = "243" + phone
     }
 
-    // Convertir en format WhatsApp
-    const whatsappNumber = phone.endsWith("@s.whatsapp.net") ? phone : `${phone}@s.whatsapp.net`
+    console.log(`📞 Traitement du numéro: ${phone}`)
+
+    // Vérifier si une session existe déjà pour ce numéro
+    if (activeSockets[phone]) {
+      console.log(`⚠️ Session existante pour ${phone}, déconnexion...`)
+      try {
+        await activeSockets[phone].logout()
+      } catch (e) {}
+      delete activeSockets[phone]
+    }
 
     // Créer le dossier de session
     const sessionPath = path.join(SESSIONS_DIR, phone)
@@ -138,16 +237,19 @@ app.post("/api/generate-pair-code", async (req, res) => {
     }
 
     // Charger l'état d'authentification
+    console.log("🔐 Chargement de l'état d'authentification...")
     const { state, saveCreds } = await useMultiFileAuthState(sessionPath)
 
     // Configurer le socket
     const sock = makeWASocket({
       auth: state,
-      printQRInTerminal: true, // Afficher aussi dans le terminal pour le débogage
+      printQRInTerminal: true,
       logger: Pino({ level: "silent" }),
       browser: ["HEXGATE", "Chrome", "4.0.0"],
       syncFullHistory: false,
-      markOnlineOnConnect: false
+      markOnlineOnConnect: false,
+      emitOwnEvents: true,
+      defaultQueryTimeoutMs: 60000
     })
 
     // Stocker le socket
@@ -159,17 +261,27 @@ app.post("/api/generate-pair-code", async (req, res) => {
     // Activer les commandes
     handleMessages(sock)
 
-    // Gérer les événements de connexion
+    // Variables pour gérer la connexion
+    let connectionTimeout
+    let qrReceived = false
+
     sock.ev.on("connection.update", async (update) => {
       const { connection, lastDisconnect, qr } = update
 
-      if (qr) {
+      console.log(`📡 État connexion pour ${phone}:`, connection)
+
+      if (qr && !qrReceived) {
         console.log(`📱 QR reçu pour ${phone}`)
+        qrReceived = true
       }
 
       if (connection === "open") {
-        botReady = true
         console.log(`✅ WhatsApp connecté : ${phone}`)
+        botReady = true
+        
+        if (connectionTimeout) {
+          clearTimeout(connectionTimeout)
+        }
 
         // Notifier le propriétaire
         try {
@@ -186,7 +298,6 @@ app.post("/api/generate-pair-code", async (req, res) => {
         console.log(`❌ Déconnexion pour ${phone}:`, reason || "Raison inconnue")
 
         if (reason === DisconnectReason.loggedOut) {
-          // Nettoyer la session
           try {
             fs.rmSync(sessionPath, { recursive: true, force: true })
             console.log(`🗑️ Session supprimée : ${phone}`)
@@ -197,30 +308,54 @@ app.post("/api/generate-pair-code", async (req, res) => {
         }
 
         botReady = false
+        
+        if (connectionTimeout) {
+          clearTimeout(connectionTimeout)
+        }
       }
     })
 
+    // Timeout pour la génération du code
+    connectionTimeout = setTimeout(() => {
+      if (!botReady) {
+        console.log(`⏱️ Timeout pour la génération du code pour ${phone}`)
+        try {
+          sock.logout()
+        } catch (e) {}
+        delete activeSockets[phone]
+      }
+    }, 30000) // 30 secondes timeout
+
     // Générer le code de pairing
     try {
-      const code = await sock.requestPairingCode(whatsappNumber)
-      console.log(`🔢 Code de pairing généré pour ${phone}: ${code}`)
+      console.log(`🔢 Génération du code pairing pour ${phone}...`)
+      const code = await sock.requestPairingCode(`${phone}@s.whatsapp.net`)
+      console.log(`✅ Code pairing généré pour ${phone}: ${code}`)
+      
+      // Arrêter le timeout
+      clearTimeout(connectionTimeout)
       
       res.json({
         success: true,
         code: code,
         phone: phone,
-        message: "Code généré avec succès"
+        message: "Code généré avec succès",
+        expiresIn: 300 // 5 minutes en secondes
       })
+      
     } catch (pairErr) {
-      console.error("❌ Erreur génération code pairing:", pairErr)
+      console.error("❌ Erreur génération code pairing:", pairErr.message)
       
       // Nettoyer en cas d'erreur
+      clearTimeout(connectionTimeout)
       delete activeSockets[phone]
-      sock.logout()
+      try {
+        sock.logout()
+      } catch (e) {}
       
       res.status(500).json({
         success: false,
-        error: "Erreur lors de la génération du code pairing"
+        error: pairErr.message || "Erreur lors de la génération du code pairing"
       })
     }
 
@@ -270,7 +405,6 @@ function handleMessages(sock) {
 
       const command = commands.get(cmdName)
       if (!command) {
-        // Répondre si commande inconnue
         await sock.sendMessage(msg.key.remoteJid, {
           text: `❌ Commande non trouvée: .${cmdName}\n\n📝 Tapez .help pour voir les commandes disponibles`
         })
@@ -286,22 +420,6 @@ function handleMessages(sock) {
   })
 }
 
-// ================== COMMANDS RELOAD ==================
-app.post("/api/reload-commands", (req, res) => {
-  try {
-    loadCommands()
-    res.json({
-      success: true,
-      message: `Commandes rechargées (${commands.size} commandes)`
-    })
-  } catch (err) {
-    res.status(500).json({
-      success: false,
-      error: err.message
-    })
-  }
-})
-
 // ================== HEALTH CHECK ==================
 app.get("/health", (req, res) => {
   res.json({
@@ -310,152 +428,38 @@ app.get("/health", (req, res) => {
     sessions: Object.keys(activeSockets).length,
     botReady: botReady,
     platform: process.platform,
-    sessionsDirectory: SESSIONS_DIR
+    version: "HEXGATE V2.0"
   })
 })
 
-// ================== INDEX ROUTE ==================
-app.get("/", (req, res) => {
-  res.send(`
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <title>HEXGATE WhatsApp Bot</title>
-      <meta charset="utf-8">
-      <meta name="viewport" content="width=device-width, initial-scale=1">
-      <style>
-        body {
-          font-family: 'Segoe UI', Arial, sans-serif;
-          margin: 0;
-          padding: 20px;
-          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-          color: white;
-          min-height: 100vh;
-        }
-        .container {
-          max-width: 800px;
-          margin: 0 auto;
-          background: rgba(255,255,255,0.1);
-          backdrop-filter: blur(10px);
-          border-radius: 20px;
-          padding: 40px;
-          box-shadow: 0 8px 32px rgba(0,0,0,0.1);
-        }
-        h1 {
-          text-align: center;
-          margin-bottom: 30px;
-          font-size: 2.5em;
-        }
-        .status {
-          background: rgba(255,255,255,0.2);
-          padding: 20px;
-          border-radius: 10px;
-          margin-bottom: 30px;
-        }
-        .status-item {
-          margin: 10px 0;
-          font-size: 1.1em;
-        }
-        .badge {
-          display: inline-block;
-          padding: 5px 10px;
-          border-radius: 5px;
-          font-weight: bold;
-          margin-left: 10px;
-        }
-        .ready { background: #10B981; }
-        .not-ready { background: #EF4444; }
-        .api-link {
-          display: block;
-          background: rgba(255,255,255,0.2);
-          color: white;
-          padding: 15px;
-          border-radius: 10px;
-          text-decoration: none;
-          margin: 10px 0;
-          transition: background 0.3s;
-        }
-        .api-link:hover {
-          background: rgba(255,255,255,0.3);
-        }
-        code {
-          background: rgba(0,0,0,0.3);
-          padding: 2px 5px;
-          border-radius: 3px;
-          font-family: monospace;
-        }
-      </style>
-    </head>
-    <body>
-      <div class="container">
-        <h1>🤖 HEXGATE WhatsApp Bot</h1>
-        
-        <div class="status">
-          <div class="status-item">
-            Statut: 
-            <span class="badge ${botReady ? 'ready' : 'not-ready'}">
-              ${botReady ? 'CONNECTÉ' : 'DÉCONNECTÉ'}
-            </span>
-          </div>
-          <div class="status-item">Sessions actives: ${Object.keys(activeSockets).length}</div>
-          <div class="status-item">Commandes disponibles: ${commands.size}</div>
-          <div class="status-item">Port: ${PORT}</div>
-        </div>
-        
-        <h2>📡 API Endpoints</h2>
-        <a href="/api/bot-status" class="api-link" target="_blank">
-          GET /api/bot-status - Vérifier le statut du bot
-        </a>
-        <a href="/health" class="api-link" target="_blank">
-          GET /health - Vérifier la santé du serveur
-        </a>
-        
-        <h2>🔧 Utilisation API</h2>
-        <div style="background: rgba(0,0,0,0.3); padding: 15px; border-radius: 10px;">
-          <p>Générer un code pairing:</p>
-          <code>POST /api/generate-pair-code</code>
-          <p style="margin-top: 10px;">Body: <code>{"phone": "243XXXXXXXXX"}</code></p>
-        </div>
-        
-        <div style="text-align: center; margin-top: 30px; opacity: 0.8;">
-          <p>🚀 Serveur actif et prêt à recevoir des commandes</p>
-        </div>
-      </div>
-      
-      <script>
-        // Auto-refresh status
-        setInterval(async () => {
-          const response = await fetch('/api/bot-status');
-          const data = await response.json();
-          
-          const statusBadge = document.querySelector('.badge');
-          const sessionsCount = document.querySelectorAll('.status-item')[1];
-          const commandsCount = document.querySelectorAll('.status-item')[2];
-          
-          if (data.ready) {
-            statusBadge.className = 'badge ready';
-            statusBadge.textContent = 'CONNECTÉ';
-          } else {
-            statusBadge.className = 'badge not-ready';
-            statusBadge.textContent = 'DÉCONNECTÉ';
-          }
-          
-          sessionsCount.textContent = \`Sessions actives: \${data.sessions}\`;
-          commandsCount.textContent = \`Commandes disponibles: \${data.commands?.length || 0}\`;
-        }, 5000);
-      </script>
-    </body>
-    </html>
-  `)
+// ================== 404 HANDLER ==================
+app.use((req, res) => {
+  res.status(404).json({
+    success: false,
+    error: "Route non trouvée"
+  })
 })
 
 // ================== START SERVER ==================
 app.listen(PORT, "0.0.0.0", () => {
-  console.log(`🚀 HEXGATE lancé sur le port ${PORT}`)
-  console.log(`📁 Dossier sessions: ${SESSIONS_DIR}`)
-  console.log(`📁 Dossier commands: ${COMMANDS_DIR}`)
-  console.log(`🌍 URL: http://0.0.0.0:${PORT}`)
-  console.log(`🔧 Environnement: ${process.env.RENDER ? 'Render' : 'Local'}`)
+  console.log(`
+╔════════════════════════════════════════╗
+║         🤖 HEXGATE V2 ONLINE           ║
+╠════════════════════════════════════════╣
+║ 📡 Port: ${PORT}${" ".repeat(34 - PORT.toString().length)}║
+║ 🌍 URL: http://localhost:${PORT}${" ".repeat(27 - PORT.toString().length)}║
+║ 🔧 Env: ${process.env.RENDER ? 'Render' : 'Local'}${" ".repeat(31 - (process.env.RENDER ? 6 : 6))}║
+╚════════════════════════════════════════╝
+
+📋 Endpoints:
+  GET  /              → Interface web
+  GET  /api/bot-status → Statut du bot
+  POST /api/generate-pair-code → Générer code
+  GET  /health        → Santé serveur
+  `)
+  
+  // Charger les commandes
+  loadCommands()
 })
 
 // ================== ERROR HANDLING ==================
@@ -467,9 +471,13 @@ process.on("unhandledRejection", (reason, promise) => {
   console.error("⚠️ Rejet non géré:", reason)
 })
 
-// Nettoyage à la fermeture
 process.on("SIGINT", () => {
-  console.log("👋 Arrêt du bot...")
-  Object.values(activeSockets).forEach(sock => sock.logout())
+  console.log("\n👋 Arrêt du bot...")
+  Object.values(activeSockets).forEach(sock => {
+    try {
+      sock.logout()
+    } catch (e) {}
+  })
+  console.log("✅ Nettoyage terminé")
   process.exit(0)
 })
