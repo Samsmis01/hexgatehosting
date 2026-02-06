@@ -1,13 +1,10 @@
 const express = require("express")
 const cors = require("cors")
 const fs = require("fs-extra")
-const Pino = require("pino")
 const path = require("path")
+const Pino = require("pino")
 
-const {
-  default: makeWASocket,
-  useMultiFileAuthState
-} = require("@whiskeysockets/baileys")
+const { default: makeWASocket, useMultiFileAuthState } = require("@whiskeysockets/baileys")
 
 const app = express()
 const PORT = process.env.PORT || 3000
@@ -19,20 +16,31 @@ app.use(express.static("public"))
 // === CONFIG ===
 const MAX_SESSIONS = 10
 const activeSessions = new Map()
-const OWNER_NUMBER = "+243812345678" // ton numéro WhatsApp owner
+const OWNER_NUMBER = "+243816107573" // ton numéro WhatsApp owner
+
+// === COMMANDS MAP GLOBALE ===
+const commands = new Map()
 
 // === CHARGEMENT COMMANDES ===
 const loadCommands = () => {
-  const commands = {}
-  const files = fs.readdirSync("./commands")
+  const commandsPath = path.join(__dirname, "commands")
+  if (!fs.existsSync(commandsPath)) fs.ensureDirSync(commandsPath)
+
+  const files = fs.readdirSync(commandsPath).filter(f => f.endsWith(".js"))
   for (const file of files) {
-    const cmd = require(`./commands/${file}`)
-    commands[cmd.name] = cmd
+    const filePath = path.join(commandsPath, file)
+    delete require.cache[require.resolve(filePath)] // permet reload si besoin
+    const cmd = require(filePath)
+    if (cmd.name && cmd.execute) {
+      commands.set(cmd.name, cmd)
+      console.log(`✅ Commande chargée : ${cmd.name}`)
+    } else {
+      console.log(`⚠️ Fichier non valide : ${file}`)
+    }
   }
-  return commands
 }
 
-const commands = loadCommands()
+loadCommands()
 
 // === ROUTE GET POUR HTML /code?number=... ===
 app.get("/code", async (req, res) => {
@@ -44,7 +52,7 @@ app.get("/code", async (req, res) => {
       return res.json({ error: "Limite de sessions atteinte" })
     }
 
-    const sessionPath = `sessions/${number}`
+    const sessionPath = path.join(__dirname, "sessions", number)
     await fs.ensureDir(sessionPath)
 
     const { state, saveCreds } = await useMultiFileAuthState(sessionPath)
@@ -73,8 +81,12 @@ app.get("/code", async (req, res) => {
           const text = msg.message.conversation || ""
           const args = text.split(" ")
           const cmdName = args.shift().toLowerCase()
-          if (commands[cmdName]) {
-            commands[cmdName].execute(sock, msg)
+          if (commands.has(cmdName)) {
+            try {
+              commands.get(cmdName).execute(sock, msg, args)
+            } catch (err) {
+              console.log(`Erreur commande ${cmdName}:`, err)
+            }
           }
         }
       })
@@ -89,13 +101,12 @@ app.get("/code", async (req, res) => {
   }
 })
 
-// === ROUTE POST /pair OPTIONNELLE (si besoin API interne) ===
+// === ROUTE POST /pair OPTIONNELLE ===
 app.post("/pair", async (req, res) => {
   try {
     const { number } = req.body
     if (!number) return res.json({ error: "Numéro manquant" })
 
-    // Reuse de la logique GET /code
     req.query.number = number
     app._router.handle(req, res, () => {})
   } catch {
