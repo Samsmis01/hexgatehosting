@@ -1,748 +1,252 @@
 <!DOCTYPE html>
-<html lang="fr">
+<html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>HEXGATE - Connexion WhatsApp</title>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-        }
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MOMO-ZEN</title>
 
-        body {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            padding: 20px;
-        }
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
 
-        .container {
-            width: 100%;
-            max-width: 500px;
-            background: white;
-            border-radius: 20px;
-            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-            overflow: hidden;
-            padding: 30px;
-        }
+<style>
+* {
+  box-sizing: border-box;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+}
 
-        .header {
-            text-align: center;
-            margin-bottom: 30px;
-        }
+body {
+  margin: 0;
+  height: 100vh;
+  background: radial-gradient(circle at top, #1e1e2f, #0b0b12);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+}
 
-        .logo {
-            width: 80px;
-            height: 80px;
-            border-radius: 50%;
-            border: 3px solid #764ba2;
-            padding: 5px;
-            margin-bottom: 15px;
-        }
+/* CARD */
+.card {
+  width: 92%;
+  max-width: 380px;
+  background: linear-gradient(180deg, #16162a, #10101c);
+  border-radius: 20px;
+  padding: 26px;
+  box-shadow: 0 25px 50px rgba(0,0,0,.7);
+  animation: pop 0.6s ease;
+}
 
-        h1 {
-            color: #333;
-            font-size: 28px;
-            margin-bottom: 5px;
-        }
+@keyframes pop {
+  from {
+    opacity: 0;
+    transform: translateY(20px) scale(.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
 
-        .subtitle {
-            color: #666;
-            font-size: 14px;
-        }
+/* TITLE */
+.card h2 {
+  margin: 0 0 6px;
+  font-size: 22px;
+  font-weight: 700;
+  text-align: center;
+}
 
-        .status-card, .card, .info-card {
-            background: #f8f9fa;
-            border-radius: 15px;
-            padding: 20px;
-            margin-bottom: 20px;
-            border: 1px solid #e9ecef;
-        }
+.card p {
+  text-align: center;
+  font-size: 14px;
+  color: #9ca3af;
+  margin-bottom: 22px;
+}
 
-        .status-card {
-            display: flex;
-            align-items: center;
-            gap: 15px;
-            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
-        }
+/* INPUT */
+.input-box {
+  display: flex;
+  align-items: center;
+  background: #1f1f33;
+  border-radius: 14px;
+  padding: 14px 16px;
+  margin-bottom: 18px;
+  border: 1px solid transparent;
+  transition: .25s ease;
+}
 
-        .status-icon {
-            background: #667eea;
-            width: 50px;
-            height: 50px;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: white;
-            font-size: 24px;
-        }
+.input-box:focus-within {
+  border-color: #6366f1;
+  box-shadow: 0 0 0 3px rgba(99,102,241,.25);
+}
 
-        .status-content h3 {
-            color: #333;
-            font-size: 16px;
-            margin-bottom: 5px;
-        }
+.input-box i {
+  color: #818cf8;
+  font-size: 18px;
+  margin-right: 12px;
+}
 
-        .status-content p {
-            color: #666;
-            font-size: 14px;
-            margin-bottom: 8px;
-        }
+.input-box input {
+  background: transparent;
+  border: none;
+  outline: none;
+  color: #fff;
+  font-size: 16px;
+  width: 100%;
+}
 
-        .status-indicator {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
+.input-box input::placeholder {
+  color: #6b7280;
+}
 
-        .status-dot {
-            width: 10px;
-            height: 10px;
-            border-radius: 50%;
-            background: #ccc;
-            animation: pulse 2s infinite;
-        }
+/* BUTTON */
+button {
+  width: 100%;
+  border: none;
+  padding: 15px;
+  border-radius: 16px;
+  background: linear-gradient(135deg, #6366f1, #3b82f6);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all .2s ease;
+}
 
-        @keyframes pulse {
-            0% { opacity: 1; }
-            50% { opacity: 0.5; }
-            100% { opacity: 1; }
-        }
+button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 25px rgba(59,130,246,.45);
+}
 
-        .status-dot.online {
-            background: #28a745;
-            animation: none;
-        }
+button:active {
+  transform: scale(.97);
+}
 
-        .status-dot.offline {
-            background: #dc3545;
-            animation: none;
-        }
+/* RESULT */
+#pair {
+  margin-top: 18px;
+  text-align: center;
+  min-height: 32px;
+}
 
-        h2 {
-            color: #333;
-            font-size: 20px;
-            margin-bottom: 15px;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
+.loader {
+  width: 22px;
+  height: 22px;
+  border: 3px solid #3b82f6;
+  border-top-color: transparent;
+  border-radius: 50%;
+  margin: auto;
+  animation: spin 1s linear infinite;
+}
 
-        .instruction {
-            color: #666;
-            font-size: 14px;
-            margin-bottom: 20px;
-            line-height: 1.5;
-        }
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
 
-        .input-group {
-            display: flex;
-            margin-bottom: 20px;
-            border: 2px solid #ddd;
-            border-radius: 10px;
-            overflow: hidden;
-            transition: border-color 0.3s;
-        }
+/* COPY BUTTON */
+.copy-btn {
+  margin-top: 12px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  border: none;
+  background: #1f2937;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  transition: all .2s ease;
+}
 
-        .input-group:focus-within {
-            border-color: #667eea;
-        }
+.copy-btn:hover {
+  background: #374151;
+}
 
-        .country-code {
-            background: #f8f9fa;
-            padding: 15px;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            color: #333;
-            font-weight: bold;
-            border-right: 2px solid #ddd;
-        }
+.copy-btn.success {
+  background: #16a34a;
+}
 
-        input {
-            flex: 1;
-            padding: 15px;
-            border: none;
-            outline: none;
-            font-size: 16px;
-            background: white;
-        }
-
-        button {
-            width: 100%;
-            padding: 15px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            border: none;
-            border-radius: 10px;
-            font-size: 16px;
-            font-weight: bold;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 10px;
-            transition: transform 0.2s, box-shadow 0.2s;
-        }
-
-        button:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
-        }
-
-        button:active {
-            transform: translateY(0);
-        }
-
-        button:disabled {
-            background: #ccc;
-            cursor: not-allowed;
-            transform: none;
-            box-shadow: none;
-        }
-
-        .result, .error {
-            margin-top: 20px;
-            padding: 20px;
-            border-radius: 10px;
-            animation: slideDown 0.3s ease-out;
-        }
-
-        @keyframes slideDown {
-            from { opacity: 0; transform: translateY(-10px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-
-        .result {
-            background: #d4edda;
-            border: 1px solid #c3e6cb;
-        }
-
-        .error {
-            background: #f8d7da;
-            border: 1px solid #f5c6cb;
-        }
-
-        .code-display {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            background: white;
-            padding: 15px;
-            border-radius: 8px;
-            margin: 15px 0;
-            border: 2px dashed #28a745;
-        }
-
-        #pairCode {
-            font-size: 32px;
-            font-weight: bold;
-            color: #333;
-            letter-spacing: 5px;
-            font-family: 'Courier New', monospace;
-        }
-
-        .copy-btn {
-            width: auto;
-            padding: 10px 20px;
-            background: #28a745;
-            font-size: 14px;
-        }
-
-        .copy-btn:hover {
-            background: #218838;
-        }
-
-        .instructions {
-            background: white;
-            padding: 15px;
-            border-radius: 8px;
-            margin: 15px 0;
-        }
-
-        .instructions h4 {
-            color: #333;
-            margin-bottom: 10px;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-
-        .instructions ol {
-            margin-left: 20px;
-            color: #555;
-            line-height: 1.8;
-        }
-
-        .instructions li {
-            margin-bottom: 8px;
-        }
-
-        .timer {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 10px;
-            background: white;
-            padding: 10px;
-            border-radius: 8px;
-            color: #333;
-            font-weight: bold;
-            margin-top: 15px;
-            border: 1px solid #ddd;
-        }
-
-        .timer.expiring {
-            color: #dc3545;
-            border-color: #dc3545;
-        }
-
-        .info-card ul {
-            list-style: none;
-        }
-
-        .info-card li {
-            padding: 8px 0;
-            color: #555;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            border-bottom: 1px solid #eee;
-        }
-
-        .info-card li:last-child {
-            border-bottom: none;
-        }
-
-        .footer {
-            text-align: center;
-            margin-top: 30px;
-            padding-top: 20px;
-            border-top: 1px solid #eee;
-            color: #666;
-            font-size: 14px;
-        }
-
-        .telegram-link a {
-            color: #667eea;
-            text-decoration: none;
-            font-weight: bold;
-        }
-
-        .telegram-link a:hover {
-            text-decoration: underline;
-        }
-
-        .version {
-            font-size: 12px;
-            color: #999;
-            margin-top: 5px;
-        }
-
-        @media (max-width: 600px) {
-            .container {
-                padding: 20px;
-            }
-            
-            .status-card {
-                flex-direction: column;
-                text-align: center;
-            }
-            
-            .code-display {
-                flex-direction: column;
-                gap: 10px;
-            }
-            
-            .copy-btn {
-                width: 100%;
-            }
-        }
-    </style>
+/* FOOTER */
+.footer {
+  text-align: center;
+  font-size: 12px;
+  color: #6b7280;
+  margin-top: 18px;
+}
+</style>
 </head>
+
 <body>
-    <div class="container">
-        <div class="header">
-            <img src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTyERDdGHGjmXPv_6tCBIChmD-svWkJatQlpzfxY5WqFg&s=10" 
-                 alt="HEXGATE Logo" class="logo">
-            <h1>HEX✦GATE V2</h1>
-            <p class="subtitle">Connectez votre bot WhatsApp facilement</p>
-        </div>
-        
-        <div class="status-card" id="statusCard">
-            <div class="status-icon">
-                <i class="fas fa-robot"></i>
-            </div>
-            <div class="status-content">
-                <h3>Statut du Bot</h3>
-                <p id="botStatus">Vérification...</p>
-                <div class="status-indicator">
-                    <span class="status-dot" id="statusDot"></span>
-                    <span id="statusText">Connexion...</span>
-                </div>
-            </div>
-        </div>
-        
-        <div class="card">
-            <h2><i class="fas fa-qrcode"></i> Générer un Code Pair</h2>
-            <p class="instruction">
-                Entrez votre numéro WhatsApp avec l'indicatif pays (ex: 243XXXXXXXXX)
-            </p>
-            
-            <form id="pairForm">
-                <div class="input-group">
-                    <div class="country-code">
-                        <i class="fas fa-flag"></i>
-                        <span>+243</span>
-                    </div>
-                    <input 
-                        type="tel" 
-                        id="phoneNumber" 
-                        placeholder="Votre numéro WhatsApp"
-                        required
-                        pattern="[0-9]{9,}"
-                        title="Entrez votre numéro sans l'indicatif">
-                </div>
-                
-                <button type="submit" id="generateBtn">
-                    <i class="fas fa-key"></i> Générer le Code
-                </button>
-            </form>
-            
-            <div class="result" id="resultContainer" style="display: none;">
-                <h3><i class="fas fa-check-circle"></i> Code Généré !</h3>
-                <div class="code-display">
-                    <span id="pairCode">XXXXXX</span>
-                    <button class="copy-btn" id="copyBtn">
-                        <i class="fas fa-copy"></i> Copier
-                    </button>
-                </div>
-                <div class="instructions">
-                    <h4><i class="fas fa-mobile-alt"></i> Instructions :</h4>
-                    <ol>
-                        <li>Ouvrez WhatsApp sur votre téléphone</li>
-                        <li>Appuyez sur <strong>⋮</strong> (trois points)</li>
-                        <li>Sélectionnez <strong>Appareils liés</strong></li>
-                        <li>Choisissez <strong>Associer un appareil</strong></li>
-                        <li>Entrez ce code : <strong id="displayCode"></strong></li>
-                    </ol>
-                </div>
-                <div class="timer" id="timerContainer">
-                    <i class="fas fa-clock"></i>
-                    <span>Ce code expire dans : </span>
-                    <span id="countdown">5:00</span>
-                </div>
-            </div>
-            
-            <div class="error" id="errorContainer" style="display: none;">
-                <h3><i class="fas fa-exclamation-triangle"></i> Erreur</h3>
-                <p id="errorMessage"></p>
-            </div>
-        </div>
-        
-        <div class="info-card">
-            <h3><i class="fas fa-info-circle"></i> Informations importantes</h3>
-            <ul>
-                <li><i class="fas fa-shield-alt"></i> Votre numéro n'est pas stocké</li>
-                <li><i class="fas fa-clock"></i> Code valable 5 minutes</li>
-                <li><i class="fas fa-sync-alt"></i> Une seule session par numéro</li>
-                <li><i class="fas fa-robot"></i> Bot maintenu par HEX-TECH</li>
-                <li><i class="fas fa-users"></i> Limite : 10 utilisateurs simultanés</li>
-            </ul>
-        </div>
-        
-        <footer class="footer">
-            <p>Powered by <strong>HEX-TECH</strong></p>
-            <p class="telegram-link">
-                <i class="fab fa-telegram"></i>
-                <a href="https://t.me/hextechcar" target="_blank">@hextechcar</a>
-            </p>
-            <p class="version">HEX✦GATE V2 | Interface Web de Pairing</p>
-        </footer>
-    </div>
-    
- <script>
-    document.addEventListener('DOMContentLoaded', function() {
-        // Éléments DOM
-        const statusDot = document.getElementById('statusDot');
-        const statusText = document.getElementById('statusText');
-        const botStatus = document.getElementById('botStatus');
-        const pairForm = document.getElementById('pairForm');
-        const phoneInput = document.getElementById('phoneNumber');
-        const generateBtn = document.getElementById('generateBtn');
-        const resultContainer = document.getElementById('resultContainer');
-        const errorContainer = document.getElementById('errorContainer');
-        const pairCode = document.getElementById('pairCode');
-        const displayCode = document.getElementById('displayCode');
-        const copyBtn = document.getElementById('copyBtn');
-        const countdown = document.getElementById('countdown');
-        const timerContainer = document.getElementById('timerContainer');
-        
-        // URL de l'API - IMPORTANT: utiliser l'URL actuelle
-        const API_BASE_URL = window.location.origin;
-        console.log('🌍 API Base URL:', API_BASE_URL);
-        
-        // Vérifier le statut du bot
-        async function checkBotStatus() {
-            try {
-                console.log('🔍 Vérification du statut du bot...');
-                const response = await fetch(`${API_BASE_URL}/api/bot-status`);
-                
-                if (!response.ok) {
-                    throw new Error(`HTTP ${response.status}`);
-                }
-                
-                const data = await response.json();
-                console.log('📊 Statut reçu:', data);
-                
-                if (data.success && data.ready) {
-                    statusDot.classList.remove('offline');
-                    statusDot.classList.add('online');
-                    statusText.textContent = 'Bot connecté';
-                    botStatus.textContent = 'Prêt à générer des codes pair';
-                    statusDot.style.animation = 'none';
-                    return true;
-                } else {
-                    statusDot.classList.remove('online');
-                    statusDot.classList.add('offline');
-                    statusText.textContent = 'Bot non connecté';
-                    botStatus.textContent = 'En attente de connexion WhatsApp...';
-                    return false;
-                }
-            } catch (error) {
-                console.error('❌ Erreur de connexion:', error);
-                statusDot.classList.remove('online');
-                statusDot.classList.add('offline');
-                statusText.textContent = 'Erreur de connexion';
-                botStatus.textContent = 'Impossible de joindre le serveur';
-                return false;
-            }
-        }
-        
-        // Générer un code pair
-        async function generatePairCode(phoneNumber) {
-            console.log('🔢 Génération du code pour:', phoneNumber);
-            
-            // Formater le numéro
-            let formattedPhone = phoneNumber.replace(/\D/g, '');
-            
-            // Ajouter l'indicatif RDC si absent
-            if (!formattedPhone.startsWith('243')) {
-                formattedPhone = '243' + formattedPhone;
-            }
-            
-            // Vérifier la longueur
-            if (formattedPhone.length < 12) {
-                showError('Numéro invalide. Format: 243XXXXXXXXX (12 chiffres minimum)');
-                return;
-            }
-            
-            if (formattedPhone.length > 15) {
-                showError('Numéro trop long. Format: 243XXXXXXXXX');
-                return;
-            }
-            
-            try {
-                // Mettre à jour le bouton
-                generateBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Génération...';
-                generateBtn.disabled = true;
-                
-                console.log('📡 Envoi de la requête à l\'API...');
-                
-                // Appel API
-                const response = await fetch(`${API_BASE_URL}/api/generate-pair-code`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({ phone: formattedPhone })
-                });
-                
-                console.log('📥 Réponse reçue, statut:', response.status);
-                
-                const data = await response.json();
-                console.log('📊 Données reçues:', data);
-                
-                if (data.success) {
-                    // Afficher le résultat
-                    showResult(data.code);
-                } else {
-                    throw new Error(data.error || 'Erreur inconnue');
-                }
-                
-            } catch (error) {
-                console.error('❌ Erreur:', error);
-                showError(error.message || 'Erreur lors de la génération du code');
-            } finally {
-                generateBtn.innerHTML = '<i class="fas fa-key"></i> Générer le Code';
-                generateBtn.disabled = false;
-            }
-        }
-        
-        // Afficher le résultat
-        function showResult(code) {
-            console.log('✅ Code généré:', code);
-            
-            resultContainer.style.display = 'block';
-            errorContainer.style.display = 'none';
-            pairCode.textContent = code;
-            displayCode.textContent = code;
-            
-            // Démarrer le compte à rebours
-            startCountdown(300); // 5 minutes
-            
-            // Faire défiler jusqu'au résultat
-            resultContainer.scrollIntoView({ behavior: 'smooth' });
-        }
-        
-        // Afficher une erreur
-        function showError(message) {
-            console.error('❌ Erreur affichée:', message);
-            
-            errorContainer.style.display = 'block';
-            resultContainer.style.display = 'none';
-            document.getElementById('errorMessage').textContent = message;
-            
-            // Faire défiler jusqu'à l'erreur
-            errorContainer.scrollIntoView({ behavior: 'smooth' });
-        }
-        
-        // Compte à rebours
-        let countdownInterval;
-        function startCountdown(seconds) {
-            clearInterval(countdownInterval);
-            timerContainer.classList.remove('expiring');
-            
-            let remaining = seconds;
-            
-            function updateCountdown() {
-                const minutes = Math.floor(remaining / 60);
-                const secs = remaining % 60;
-                
-                countdown.textContent = `${minutes}:${secs < 10 ? '0' : ''}${secs}`;
-                
-                // Changer la couleur quand il reste moins d'une minute
-                if (remaining <= 60) {
-                    timerContainer.classList.add('expiring');
-                }
-                
-                if (remaining <= 0) {
-                    clearInterval(countdownInterval);
-                    countdown.textContent = 'Expiré';
-                    
-                    // Ajouter un message d'expiration
-                    const expiredMsg = document.createElement('p');
-                    expiredMsg.textContent = 'Le code a expiré, générez-en un nouveau';
-                    expiredMsg.style.color = '#dc3545';
-                    expiredMsg.style.fontWeight = 'bold';
-                    expiredMsg.style.marginTop = '10px';
-                    expiredMsg.style.textAlign = 'center';
-                    timerContainer.parentElement.appendChild(expiredMsg);
-                }
-                
-                remaining--;
-            }
-            
-            updateCountdown();
-            countdownInterval = setInterval(updateCountdown, 1000);
-        }
-        
-        // Copier le code
-        copyBtn.addEventListener('click', function() {
-            navigator.clipboard.writeText(pairCode.textContent)
-                .then(() => {
-                    const originalText = copyBtn.innerHTML;
-                    copyBtn.innerHTML = '<i class="fas fa-check"></i> Copié !';
-                    copyBtn.style.background = '#28a745';
-                    
-                    setTimeout(() => {
-                        copyBtn.innerHTML = originalText;
-                        copyBtn.style.background = '';
-                    }, 2000);
-                })
-                .catch(err => {
-                    console.error('Erreur de copie:', err);
-                    
-                    // Fallback pour les anciens navigateurs
-                    const textArea = document.createElement('textarea');
-                    textArea.value = pairCode.textContent;
-                    document.body.appendChild(textArea);
-                    textArea.select();
-                    try {
-                        document.execCommand('copy');
-                        alert('Code copié !');
-                    } catch (e) {
-                        alert('Impossible de copier le code. Copiez-le manuellement: ' + pairCode.textContent);
-                    }
-                    document.body.removeChild(textArea);
-                });
-        });
-        
-        // Gestion du formulaire
-        pairForm.addEventListener('submit', function(e) {
-            e.preventDefault();
-            
-            const phone = phoneInput.value.trim();
-            
-            if (!phone) {
-                showError('Veuillez entrer un numéro');
-                return;
-            }
-            
-            if (!/^\d{9,}$/.test(phone)) {
-                showError('Veuillez entrer un numéro valide (9 chiffres minimum)');
-                return;
-            }
-            
-            generatePairCode(phone);
-        });
-        
-        // Formatage automatique du numéro
-        phoneInput.addEventListener('input', function(e) {
-            let value = e.target.value.replace(/\D/g, '');
-            e.target.value = value;
-        });
-        
-        // Validation en temps réel
-        phoneInput.addEventListener('blur', function() {
-            const phone = phoneInput.value.trim();
-            if (phone && !/^\d{9,}$/.test(phone)) {
-                phoneInput.style.borderColor = '#dc3545';
-            } else {
-                phoneInput.style.borderColor = '';
-            }
-        });
-        
-        // Focus sur le champ de numéro au chargement
-        phoneInput.focus();
-        
-        // Vérifier le statut du bot au démarrage
-        console.log('🚀 Initialisation de l\'interface...');
-        checkBotStatus();
-        
-        // Vérifier aussi toutes les 10 secondes
-        setInterval(checkBotStatus, 10000);
-        
-        // Vérifier aussi quand la page redevient visible
-        document.addEventListener('visibilitychange', function() {
-            if (!document.hidden) {
-                console.log('🔍 Page redevenue visible, vérification du statut...');
-                checkBotStatus();
-            }
-        });
-        
-        // Afficher les logs dans la console
-        console.log('✅ Interface HEXGATE V2 chargée avec succès');
-        console.log('🌐 URL actuelle:', window.location.href);
-        console.log('🔌 API URL:', API_BASE_URL);
-    });
+
+<div class="card">
+  <h2>MOMO-ZEN Pairing</h2>
+  <p>Enter your WhatsApp number in international format</p>
+
+  <div class="input-box">
+    <i class="fa-solid fa-phone"></i>
+    <input type="number" id="number" placeholder="+243xxxxxxxxx">
+  </div>
+
+  <button id="submit">
+    <i class="fa-solid fa-link"></i> Generate Pairing Code
+  </button>
+
+  <main id="pair"></main>
+
+  <div class="footer">© MOMO-ZEN</div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/axios/1.0.0-alpha.1/axios.min.js"></script>
+
+<script>
+let a = document.getElementById("pair");
+let b = document.getElementById("submit");
+let c = document.getElementById("number");
+
+async function Copy() {
+  let codeEl = document.getElementById("copy");
+  let btn = document.querySelector(".copy-btn");
+
+  await navigator.clipboard.writeText(codeEl.dataset.code);
+
+  btn.classList.add("success");
+  btn.innerHTML = '<i class="fa-solid fa-check"></i> Copied';
+
+  setTimeout(() => {
+    btn.classList.remove("success");
+    btn.innerHTML = '<i class="fa-solid fa-copy"></i> Copy Code';
+  }, 1200);
+}
+
+b.addEventListener("click", async (e) => {
+  e.preventDefault();
+
+  if (!c.value || c.value.replace(/[^0-9]/g, "").length < 11) {
+    a.innerHTML = '<p style="color:#f87171">Invalid number format</p>';
+    return;
+  }
+
+  const bc = c.value.replace(/[^0-9]/g, "");
+  a.innerHTML = '<div class="loader"></div>';
+
+  try {
+    let { data } = await axios(`/code?number=${bc}`);
+    let code = data.code || "Unavailable";
+
+    a.innerHTML = `
+      <div id="copy" data-code="${code}"
+           style="color:#ef4444;font-weight:700;font-size:18px">
+        CODE: ${code}
+      </div>
+
+      <button class="copy-btn" onclick="Copy()">
+        <i class="fa-solid fa-copy"></i> Copy Code
+      </button>
+    `;
+  } catch {
+    a.innerHTML = '<p style="color:#f87171">Service error</p>';
+  }
+});
 </script>
+
 </body>
 </html>
