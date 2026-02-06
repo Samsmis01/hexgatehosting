@@ -1,18 +1,11 @@
 {
-  "name": "hexgate-bot",
+  "name": "momo-zen-md",
   "version": "2.0.0",
-  "description": "HEX✦GATE WhatsApp Bot",
+  "description": "MOMO-ZEN WhatsApp MD Bot",
   "main": "index.js",
   "engines": {
     "node": ">=18.0.0",
     "npm": ">=8.0.0"
-  },
-  "overrides": {
-    "qified": {
-      "engines": {
-        "node": ">=18.0.0"
-      }
-    }
   },
   "scripts": {
     "start": "node index.js",
