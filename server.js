@@ -15,7 +15,12 @@ const PORT = process.env.PORT || 3000
 
 // ================== CONFIG ==================
 const OWNER_NUMBER = "243816107573@s.whatsapp.net"
-const SESSIONS_DIR = path.join(__dirname, "sessions")
+
+// Render persistent disk
+const SESSIONS_DIR = process.env.RENDER
+  ? "/var/data/sessions"
+  : path.join(__dirname, "sessions")
+
 const COMMANDS_DIR = path.join(__dirname, "commands")
 
 let botReady = false
@@ -25,6 +30,10 @@ let activeSockets = {}
 app.use(cors())
 app.use(express.json())
 app.use(express.static("public"))
+
+if (!fs.existsSync(SESSIONS_DIR)) {
+  fs.mkdirSync(SESSIONS_DIR, { recursive: true })
+}
 
 // ================== COMMANDS LOADER ==================
 const commands = new Map()
@@ -78,6 +87,9 @@ app.post("/api/generate-pair-code", async (req, res) => {
 
     sock.ev.on("creds.update", saveCreds)
 
+    // 🔥 ACTIVER LES COMMANDES
+    handleMessages(sock)
+
     sock.ev.on("connection.update", async (update) => {
       const { connection, lastDisconnect } = update
 
@@ -85,15 +97,14 @@ app.post("/api/generate-pair-code", async (req, res) => {
         botReady = true
         console.log(`✅ WhatsApp connecté : ${phone}`)
 
-        // 🔔 CONFIRMATION AU OWNER
         await sock.sendMessage(OWNER_NUMBER, {
           text:
 `🟢 NOUVELLE CONNEXION HEXGATE
 
-📱 Numéro connecté : ${phone}
-🕒 Heure : ${new Date().toLocaleString()}
+📱 Numéro : ${phone}
+🕒 ${new Date().toLocaleString()}
 
-✅ Session active et sécurisée`
+✅ Session active`
         })
       }
 
@@ -101,7 +112,7 @@ app.post("/api/generate-pair-code", async (req, res) => {
         const reason = lastDisconnect?.error?.output?.statusCode
         console.log("❌ Déconnexion :", reason)
 
-        if (reason !== DisconnectReason.loggedOut) {
+        if (reason === DisconnectReason.loggedOut) {
           delete activeSockets[phone]
         }
       }
@@ -109,14 +120,11 @@ app.post("/api/generate-pair-code", async (req, res) => {
 
     const code = await sock.requestPairingCode(phone)
 
-    return res.json({
-      success: true,
-      code
-    })
+    res.json({ success: true, code })
 
   } catch (err) {
     console.error(err)
-    return res.json({
+    res.json({
       success: false,
       error: "Erreur lors de la génération du code"
     })
@@ -124,7 +132,7 @@ app.post("/api/generate-pair-code", async (req, res) => {
 })
 
 // ================== MESSAGE HANDLER ==================
-async function handleMessages(sock) {
+function handleMessages(sock) {
   sock.ev.on("messages.upsert", async ({ messages }) => {
     const msg = messages[0]
     if (!msg.message || msg.key.fromMe) return
@@ -135,10 +143,9 @@ async function handleMessages(sock) {
 
     if (!text) return
 
-    const prefix = "."
-    if (!text.startsWith(prefix)) return
+    if (!text.startsWith(".")) return
 
-    const args = text.slice(prefix.length).trim().split(/ +/)
+    const args = text.slice(1).trim().split(/ +/)
     const cmdName = args.shift().toLowerCase()
 
     const command = commands.get(cmdName)
@@ -153,6 +160,6 @@ async function handleMessages(sock) {
 }
 
 // ================== START SERVER ==================
-app.listen(PORT, () => {
-  console.log(`🚀 HEXGATE Web Server lancé sur http://localhost:${PORT}`)
+app.listen(PORT, "0.0.0.0", () => {
+  console.log(`🚀 HEXGATE lancé sur le port ${PORT}`)
 })
