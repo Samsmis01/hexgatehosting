@@ -6,7 +6,6 @@
     <title>HEXGATE - Connexion WhatsApp</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
-        /* CSS intégré */
         * {
             margin: 0;
             padding: 0;
@@ -347,7 +346,6 @@
             margin-top: 5px;
         }
 
-        /* Responsive */
         @media (max-width: 600px) {
             .container {
                 padding: 20px;
@@ -456,6 +454,7 @@
                 <li><i class="fas fa-clock"></i> Code valable 5 minutes</li>
                 <li><i class="fas fa-sync-alt"></i> Une seule session par numéro</li>
                 <li><i class="fas fa-robot"></i> Bot maintenu par HEX-TECH</li>
+                <li><i class="fas fa-users"></i> Limite : 10 utilisateurs simultanés</li>
             </ul>
         </div>
         
@@ -465,250 +464,285 @@
                 <i class="fab fa-telegram"></i>
                 <a href="https://t.me/hextechcar" target="_blank">@hextechcar</a>
             </p>
-            <p class="version">HEX✦GATE V2</p>
+            <p class="version">HEX✦GATE V2 | Interface Web de Pairing</p>
         </footer>
     </div>
     
-    <script>
-        // JavaScript intégré
-        document.addEventListener('DOMContentLoaded', function() {
-            // Éléments DOM
-            const statusDot = document.getElementById('statusDot');
-            const statusText = document.getElementById('statusText');
-            const botStatus = document.getElementById('botStatus');
-            const pairForm = document.getElementById('pairForm');
-            const phoneInput = document.getElementById('phoneNumber');
-            const generateBtn = document.getElementById('generateBtn');
-            const resultContainer = document.getElementById('resultContainer');
-            const errorContainer = document.getElementById('errorContainer');
-            const pairCode = document.getElementById('pairCode');
-            const displayCode = document.getElementById('displayCode');
-            const copyBtn = document.getElementById('copyBtn');
-            const countdown = document.getElementById('countdown');
-            const timerContainer = document.getElementById('timerContainer');
-            
-            // URL de l'API - adaptée pour Render
-            const API_BASE_URL = window.location.origin;
-            
-            // Vérifier le statut du bot
-            async function checkBotStatus() {
-                try {
-                    const response = await fetch(`${API_BASE_URL}/api/bot-status`);
-                    const data = await response.json();
-                    
-                    if (data.ready) {
-                        statusDot.classList.add('online');
-                        statusText.textContent = 'Bot connecté';
-                        botStatus.textContent = 'Prêt à générer des codes pair';
-                        statusDot.style.animation = 'none';
-                        return true;
-                    } else {
-                        statusDot.classList.add('offline');
-                        statusText.textContent = 'Bot non connecté';
-                        botStatus.textContent = 'En attente de connexion WhatsApp...';
-                        return false;
-                    }
-                } catch (error) {
-                    console.error('Erreur de connexion:', error);
+ <script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Éléments DOM
+        const statusDot = document.getElementById('statusDot');
+        const statusText = document.getElementById('statusText');
+        const botStatus = document.getElementById('botStatus');
+        const pairForm = document.getElementById('pairForm');
+        const phoneInput = document.getElementById('phoneNumber');
+        const generateBtn = document.getElementById('generateBtn');
+        const resultContainer = document.getElementById('resultContainer');
+        const errorContainer = document.getElementById('errorContainer');
+        const pairCode = document.getElementById('pairCode');
+        const displayCode = document.getElementById('displayCode');
+        const copyBtn = document.getElementById('copyBtn');
+        const countdown = document.getElementById('countdown');
+        const timerContainer = document.getElementById('timerContainer');
+        
+        // URL de l'API - IMPORTANT: utiliser l'URL actuelle
+        const API_BASE_URL = window.location.origin;
+        console.log('🌍 API Base URL:', API_BASE_URL);
+        
+        // Vérifier le statut du bot
+        async function checkBotStatus() {
+            try {
+                console.log('🔍 Vérification du statut du bot...');
+                const response = await fetch(`${API_BASE_URL}/api/bot-status`);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+                
+                const data = await response.json();
+                console.log('📊 Statut reçu:', data);
+                
+                if (data.success && data.ready) {
+                    statusDot.classList.remove('offline');
+                    statusDot.classList.add('online');
+                    statusText.textContent = 'Bot connecté';
+                    botStatus.textContent = 'Prêt à générer des codes pair';
+                    statusDot.style.animation = 'none';
+                    return true;
+                } else {
+                    statusDot.classList.remove('online');
                     statusDot.classList.add('offline');
-                    statusText.textContent = 'Erreur de connexion';
-                    botStatus.textContent = 'Impossible de joindre le serveur';
+                    statusText.textContent = 'Bot non connecté';
+                    botStatus.textContent = 'En attente de connexion WhatsApp...';
                     return false;
                 }
+            } catch (error) {
+                console.error('❌ Erreur de connexion:', error);
+                statusDot.classList.remove('online');
+                statusDot.classList.add('offline');
+                statusText.textContent = 'Erreur de connexion';
+                botStatus.textContent = 'Impossible de joindre le serveur';
+                return false;
+            }
+        }
+        
+        // Générer un code pair
+        async function generatePairCode(phoneNumber) {
+            console.log('🔢 Génération du code pour:', phoneNumber);
+            
+            // Formater le numéro
+            let formattedPhone = phoneNumber.replace(/\D/g, '');
+            
+            // Ajouter l'indicatif RDC si absent
+            if (!formattedPhone.startsWith('243')) {
+                formattedPhone = '243' + formattedPhone;
             }
             
-            // Générer un code pair
-            async function generatePairCode(phoneNumber) {
-                // Formater le numéro
-                let formattedPhone = phoneNumber.replace(/\D/g, '');
-                
-                // Ajouter l'indicatif RDC si absent
-                if (!formattedPhone.startsWith('243')) {
-                    formattedPhone = '243' + formattedPhone;
-                }
-                
-                // Vérifier la longueur
-                if (formattedPhone.length < 12) {
-                    showError('Numéro invalide. Format: 243XXXXXXXXX (12 chiffres)');
-                    return;
-                }
-                
-                try {
-                    // Mettre à jour le bouton
-                    generateBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Génération...';
-                    generateBtn.disabled = true;
-                    
-                    // Appel API
-                    const response = await fetch(`${API_BASE_URL}/api/generate-pair-code`, {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify({ phone: formattedPhone })
-                    });
-                    
-                    const data = await response.json();
-                    
-                    if (data.success) {
-                        // Afficher le résultat
-                        showResult(data.code);
-                    } else {
-                        throw new Error(data.error || 'Erreur inconnue');
-                    }
-                    
-                } catch (error) {
-                    showError(error.message);
-                } finally {
-                    generateBtn.innerHTML = '<i class="fas fa-key"></i> Générer le Code';
-                    generateBtn.disabled = false;
-                }
+            // Vérifier la longueur
+            if (formattedPhone.length < 12) {
+                showError('Numéro invalide. Format: 243XXXXXXXXX (12 chiffres minimum)');
+                return;
             }
             
-            // Afficher le résultat
-            function showResult(code) {
-                resultContainer.style.display = 'block';
-                errorContainer.style.display = 'none';
-                pairCode.textContent = code;
-                displayCode.textContent = code;
-                
-                // Démarrer le compte à rebours
-                startCountdown(300); // 5 minutes
-                
-                // Faire défiler jusqu'au résultat
-                resultContainer.scrollIntoView({ behavior: 'smooth' });
+            if (formattedPhone.length > 15) {
+                showError('Numéro trop long. Format: 243XXXXXXXXX');
+                return;
             }
             
-            // Afficher une erreur
-            function showError(message) {
-                errorContainer.style.display = 'block';
-                resultContainer.style.display = 'none';
-                document.getElementById('errorMessage').textContent = message;
+            try {
+                // Mettre à jour le bouton
+                generateBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Génération...';
+                generateBtn.disabled = true;
                 
-                // Faire défiler jusqu'à l'erreur
-                errorContainer.scrollIntoView({ behavior: 'smooth' });
-            }
-            
-            // Compte à rebours
-            let countdownInterval;
-            function startCountdown(seconds) {
-                clearInterval(countdownInterval);
-                timerContainer.classList.remove('expiring');
+                console.log('📡 Envoi de la requête à l\'API...');
                 
-                let remaining = seconds;
+                // Appel API
+                const response = await fetch(`${API_BASE_URL}/api/generate-pair-code`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ phone: formattedPhone })
+                });
                 
-                function updateCountdown() {
-                    const minutes = Math.floor(remaining / 60);
-                    const secs = remaining % 60;
-                    
-                    countdown.textContent = `${minutes}:${secs < 10 ? '0' : ''}${secs}`;
-                    
-                    // Changer la couleur quand il reste moins d'une minute
-                    if (remaining <= 60) {
-                        timerContainer.classList.add('expiring');
-                    }
-                    
-                    if (remaining <= 0) {
-                        clearInterval(countdownInterval);
-                        countdown.textContent = 'Expiré';
-                        
-                        // Ajouter un message d'expiration
-                        const expiredMsg = document.createElement('p');
-                        expiredMsg.textContent = 'Le code a expiré, générez-en un nouveau';
-                        expiredMsg.style.color = '#dc3545';
-                        expiredMsg.style.fontWeight = 'bold';
-                        expiredMsg.style.marginTop = '10px';
-                        expiredMsg.style.textAlign = 'center';
-                        timerContainer.parentElement.appendChild(expiredMsg);
-                    }
-                    
-                    remaining--;
-                }
+                console.log('📥 Réponse reçue, statut:', response.status);
                 
-                updateCountdown();
-                countdownInterval = setInterval(updateCountdown, 1000);
-            }
-            
-            // Copier le code
-            copyBtn.addEventListener('click', function() {
-                navigator.clipboard.writeText(pairCode.textContent)
-                    .then(() => {
-                        const originalText = copyBtn.innerHTML;
-                        copyBtn.innerHTML = '<i class="fas fa-check"></i> Copié !';
-                        copyBtn.style.background = '#28a745';
-                        
-                        setTimeout(() => {
-                            copyBtn.innerHTML = originalText;
-                            copyBtn.style.background = '';
-                        }, 2000);
-                    })
-                    .catch(err => {
-                        console.error('Erreur de copie:', err);
-                        alert('Impossible de copier le code. Copiez-le manuellement.');
-                    });
-            });
-            
-            // Gestion du formulaire
-            pairForm.addEventListener('submit', function(e) {
-                e.preventDefault();
+                const data = await response.json();
+                console.log('📊 Données reçues:', data);
                 
-                const phone = phoneInput.value.trim();
-                
-                if (!phone) {
-                    showError('Veuillez entrer un numéro');
-                    return;
-                }
-                
-                if (!/^\d{9,}$/.test(phone)) {
-                    showError('Veuillez entrer un numéro valide (9 chiffres minimum)');
-                    return;
-                }
-                
-                generatePairCode(phone);
-            });
-            
-            // Formatage automatique du numéro
-            phoneInput.addEventListener('input', function(e) {
-                let value = e.target.value.replace(/\D/g, '');
-                e.target.value = value;
-            });
-            
-            // Validation en temps réel
-            phoneInput.addEventListener('blur', function() {
-                const phone = phoneInput.value.trim();
-                if (phone && !/^\d{9,}$/.test(phone)) {
-                    phoneInput.style.borderColor = '#dc3545';
+                if (data.success) {
+                    // Afficher le résultat
+                    showResult(data.code);
                 } else {
-                    phoneInput.style.borderColor = '';
+                    throw new Error(data.error || 'Erreur inconnue');
                 }
-            });
+                
+            } catch (error) {
+                console.error('❌ Erreur:', error);
+                showError(error.message || 'Erreur lors de la génération du code');
+            } finally {
+                generateBtn.innerHTML = '<i class="fas fa-key"></i> Générer le Code';
+                generateBtn.disabled = false;
+            }
+        }
+        
+        // Afficher le résultat
+        function showResult(code) {
+            console.log('✅ Code généré:', code);
             
-            // Focus sur le champ de numéro au chargement
-            phoneInput.focus();
+            resultContainer.style.display = 'block';
+            errorContainer.style.display = 'none';
+            pairCode.textContent = code;
+            displayCode.textContent = code;
             
-            // Vérifier le statut du bot
-            checkBotStatus();
+            // Démarrer le compte à rebours
+            startCountdown(300); // 5 minutes
             
-            // Vérifier aussi toutes les 30 secondes
-            setInterval(checkBotStatus, 30000);
+            // Faire défiler jusqu'au résultat
+            resultContainer.scrollIntoView({ behavior: 'smooth' });
+        }
+        
+        // Afficher une erreur
+        function showError(message) {
+            console.error('❌ Erreur affichée:', message);
             
-            // Vérifier aussi quand la page redevient visible
-            document.addEventListener('visibilitychange', function() {
-                if (!document.hidden) {
-                    checkBotStatus();
+            errorContainer.style.display = 'block';
+            resultContainer.style.display = 'none';
+            document.getElementById('errorMessage').textContent = message;
+            
+            // Faire défiler jusqu'à l'erreur
+            errorContainer.scrollIntoView({ behavior: 'smooth' });
+        }
+        
+        // Compte à rebours
+        let countdownInterval;
+        function startCountdown(seconds) {
+            clearInterval(countdownInterval);
+            timerContainer.classList.remove('expiring');
+            
+            let remaining = seconds;
+            
+            function updateCountdown() {
+                const minutes = Math.floor(remaining / 60);
+                const secs = remaining % 60;
+                
+                countdown.textContent = `${minutes}:${secs < 10 ? '0' : ''}${secs}`;
+                
+                // Changer la couleur quand il reste moins d'une minute
+                if (remaining <= 60) {
+                    timerContainer.classList.add('expiring');
                 }
-            });
-            
-            // Fonction pour tester l'API (pour le développement)
-            window.testAPI = async function() {
-                try {
-                    const response = await fetch(`${API_BASE_URL}/api/bot-status`);
-                    const data = await response.json();
-                    alert(`Statut API: ${JSON.stringify(data)}`);
-                } catch (error) {
-                    alert(`Erreur API: ${error.message}`);
+                
+                if (remaining <= 0) {
+                    clearInterval(countdownInterval);
+                    countdown.textContent = 'Expiré';
+                    
+                    // Ajouter un message d'expiration
+                    const expiredMsg = document.createElement('p');
+                    expiredMsg.textContent = 'Le code a expiré, générez-en un nouveau';
+                    expiredMsg.style.color = '#dc3545';
+                    expiredMsg.style.fontWeight = 'bold';
+                    expiredMsg.style.marginTop = '10px';
+                    expiredMsg.style.textAlign = 'center';
+                    timerContainer.parentElement.appendChild(expiredMsg);
                 }
-            };
+                
+                remaining--;
+            }
+            
+            updateCountdown();
+            countdownInterval = setInterval(updateCountdown, 1000);
+        }
+        
+        // Copier le code
+        copyBtn.addEventListener('click', function() {
+            navigator.clipboard.writeText(pairCode.textContent)
+                .then(() => {
+                    const originalText = copyBtn.innerHTML;
+                    copyBtn.innerHTML = '<i class="fas fa-check"></i> Copié !';
+                    copyBtn.style.background = '#28a745';
+                    
+                    setTimeout(() => {
+                        copyBtn.innerHTML = originalText;
+                        copyBtn.style.background = '';
+                    }, 2000);
+                })
+                .catch(err => {
+                    console.error('Erreur de copie:', err);
+                    
+                    // Fallback pour les anciens navigateurs
+                    const textArea = document.createElement('textarea');
+                    textArea.value = pairCode.textContent;
+                    document.body.appendChild(textArea);
+                    textArea.select();
+                    try {
+                        document.execCommand('copy');
+                        alert('Code copié !');
+                    } catch (e) {
+                        alert('Impossible de copier le code. Copiez-le manuellement: ' + pairCode.textContent);
+                    }
+                    document.body.removeChild(textArea);
+                });
         });
-    </script>
+        
+        // Gestion du formulaire
+        pairForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const phone = phoneInput.value.trim();
+            
+            if (!phone) {
+                showError('Veuillez entrer un numéro');
+                return;
+            }
+            
+            if (!/^\d{9,}$/.test(phone)) {
+                showError('Veuillez entrer un numéro valide (9 chiffres minimum)');
+                return;
+            }
+            
+            generatePairCode(phone);
+        });
+        
+        // Formatage automatique du numéro
+        phoneInput.addEventListener('input', function(e) {
+            let value = e.target.value.replace(/\D/g, '');
+            e.target.value = value;
+        });
+        
+        // Validation en temps réel
+        phoneInput.addEventListener('blur', function() {
+            const phone = phoneInput.value.trim();
+            if (phone && !/^\d{9,}$/.test(phone)) {
+                phoneInput.style.borderColor = '#dc3545';
+            } else {
+                phoneInput.style.borderColor = '';
+            }
+        });
+        
+        // Focus sur le champ de numéro au chargement
+        phoneInput.focus();
+        
+        // Vérifier le statut du bot au démarrage
+        console.log('🚀 Initialisation de l\'interface...');
+        checkBotStatus();
+        
+        // Vérifier aussi toutes les 10 secondes
+        setInterval(checkBotStatus, 10000);
+        
+        // Vérifier aussi quand la page redevient visible
+        document.addEventListener('visibilitychange', function() {
+            if (!document.hidden) {
+                console.log('🔍 Page redevenue visible, vérification du statut...');
+                checkBotStatus();
+            }
+        });
+        
+        // Afficher les logs dans la console
+        console.log('✅ Interface HEXGATE V2 chargée avec succès');
+        console.log('🌐 URL actuelle:', window.location.href);
+        console.log('🔌 API URL:', API_BASE_URL);
+    });
+</script>
 </body>
 </html>
