@@ -17,20 +17,20 @@ const PORT = process.env.PORT || 3000
 // ================== CONFIG ==================
 const OWNER_NUMBER = "243816107573@s.whatsapp.net"
 
-// Dossier de sessions adapté selon l'environnement
+// Dossier de sessions
 const SESSIONS_DIR = process.env.RENDER
-  ? path.join(os.tmpdir(), "sessions")
+  ? path.join(os.tmpdir(), "whatsapp-sessions")
   : path.join(__dirname, "sessions")
 
 const COMMANDS_DIR = path.join(__dirname, "commands")
 
 let botReady = false
 let activeSockets = {}
+let pairingAttempts = new Map() // Suivi des tentatives
 
 // ================== MIDDLEWARE ==================
-// Important: CORS doit être configuré correctement
 app.use(cors({
-  origin: '*', // Permettre toutes les origines (à restreindre en production)
+  origin: '*',
   methods: ['GET', 'POST'],
   credentials: true
 }))
@@ -38,7 +38,7 @@ app.use(cors({
 app.use(express.json())
 app.use(express.urlencoded({ extended: true }))
 
-// Servir les fichiers statiques depuis le dossier 'public'
+// Servir les fichiers statiques
 const PUBLIC_DIR = path.join(__dirname, "public")
 if (!fs.existsSync(PUBLIC_DIR)) {
   fs.mkdirSync(PUBLIC_DIR, { recursive: true })
@@ -47,25 +47,13 @@ if (!fs.existsSync(PUBLIC_DIR)) {
 
 app.use(express.static(PUBLIC_DIR))
 
-// Vérifier et créer le dossier de sessions
-if (!fs.existsSync(SESSIONS_DIR)) {
-  try {
-    fs.mkdirSync(SESSIONS_DIR, { recursive: true })
-    console.log(`📁 Dossier de sessions créé : ${SESSIONS_DIR}`)
-  } catch (err) {
-    console.error(`❌ Erreur création dossier sessions: ${err.message}`)
-    const fallbackDir = path.join(__dirname, "sessions")
-    if (!fs.existsSync(fallbackDir)) {
-      fs.mkdirSync(fallbackDir, { recursive: true })
-    }
+// Créer les dossiers nécessaires
+[COMMANDS_DIR, SESSIONS_DIR].forEach(dir => {
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true })
+    console.log(`📁 Dossier créé : ${dir}`)
   }
-}
-
-// Créer le dossier commands s'il n'existe pas
-if (!fs.existsSync(COMMANDS_DIR)) {
-  fs.mkdirSync(COMMANDS_DIR, { recursive: true })
-  console.log(`📁 Dossier commands créé : ${COMMANDS_DIR}`)
-}
+})
 
 // ================== COMMANDS LOADER ==================
 const commands = new Map()
@@ -77,36 +65,6 @@ function loadCommands() {
     const files = fs.readdirSync(COMMANDS_DIR)
       .filter(file => file.endsWith(".js"))
     
-    if (files.length === 0) {
-      console.log("📁 Aucune commande trouvée dans le dossier 'commands'")
-      
-      // Créer une commande ping par défaut
-      const defaultPing = path.join(COMMANDS_DIR, "ping.js")
-      if (!fs.existsSync(defaultPing)) {
-        const pingCode = `
-module.exports = {
-  name: "ping",
-  description: "Vérifie si le bot est actif",
-  
-  async execute(sock, msg, args) {
-    const jid = msg.key.remoteJid
-    
-    await sock.sendMessage(jid, {
-      text: "🏓 Pong! HEXGATE est actif et fonctionnel!\\n\\n" +
-            "🕒 " + new Date().toLocaleString() + "\\n" +
-            "📱 Utilisez .help pour voir toutes les commandes"
-    })
-  }
-}
-        `
-        fs.writeFileSync(defaultPing, pingCode)
-        console.log("✅ Commande ping créée par défaut")
-      }
-      
-      // Recharger après création
-      files.push("ping.js")
-    }
-    
     files.forEach(file => {
       try {
         const cmdPath = path.join(COMMANDS_DIR, file)
@@ -116,8 +74,6 @@ module.exports = {
         if (cmd.name && cmd.execute) {
           commands.set(cmd.name, cmd)
           console.log(`✅ Commande chargée : ${cmd.name}`)
-        } else {
-          console.log(`⚠️ Fichier invalide : ${file} (manque 'name' ou 'execute')`)
         }
       } catch (error) {
         console.error(`❌ Erreur chargement ${file}:`, error.message)
@@ -128,64 +84,90 @@ module.exports = {
   }
 }
 
-// Charger les commandes au démarrage
 loadCommands()
 
+// ================== UTILITY FUNCTIONS ==================
+function formatPhoneNumber(phone) {
+  // Nettoyer le numéro
+  phone = phone.replace(/\D/g, '')
+  
+  // Supprimer les zéros en début si présents
+  phone = phone.replace(/^0+/, '')
+  
+  // Si le numéro commence déjà par un indicatif, le laisser
+  const countryCodes = ['1', '20', '27', '30', '31', '32', '33', '34', '36', '39', 
+                       '40', '41', '43', '44', '45', '46', '47', '48', '49', '51',
+                       '52', '53', '54', '55', '56', '57', '58', '60', '61', '62',
+                       '63', '64', '65', '66', '81', '82', '84', '86', '90', '91',
+                       '92', '93', '94', '95', '98', '212', '213', '216', '218',
+                       '220', '221', '222', '223', '224', '225', '226', '227', '228',
+                       '229', '230', '231', '232', '233', '234', '235', '236', '237',
+                       '238', '239', '240', '241', '242', '243', '244', '245', '246',
+                       '247', '248', '249', '250', '251', '252', '253', '254', '255',
+                       '256', '257', '258', '260', '261', '262', '263', '264', '265',
+                       '266', '267', '268', '269', '290', '291', '297', '298', '299',
+                       '350', '351', '352', '353', '354', '355', '356', '357', '358',
+                       '359', '370', '371', '372', '373', '374', '375', '376', '377',
+                       '378', '379', '380', '381', '382', '383', '385', '386', '387',
+                       '389', '420', '421', '423', '500', '501', '502', '503', '504',
+                       '505', '506', '507', '508', '509', '590', '591', '592', '593',
+                       '594', '595', '596', '597', '598', '599', '670', '672', '673',
+                       '674', '675', '676', '677', '678', '679', '680', '681', '682',
+                       '683', '685', '686', '687', '688', '689', '690', '691', '692',
+                       '850', '852', '853', '855', '856', '880', '886', '960', '961',
+                       '962', '963', '964', '965', '966', '967', '968', '970', '971',
+                       '972', '973', '974', '975', '976', '977', '992', '993', '994',
+                       '995', '996', '998']
+  
+  // Vérifier si le numéro commence par un indicatif connu
+  let hasCountryCode = false
+  for (const code of countryCodes) {
+    if (phone.startsWith(code)) {
+      hasCountryCode = true
+      break
+    }
+  }
+  
+  // Si pas d'indicatif, on considère que c'est un numéro local
+  // On laisse l'utilisateur entrer son numéro complet avec l'indicatif
+  return phone
+}
+
+function validatePhoneNumber(phone) {
+  if (!phone || phone.length < 8) {
+    return { valid: false, error: "Numéro trop court (minimum 8 chiffres)" }
+  }
+  
+  if (phone.length > 15) {
+    return { valid: false, error: "Numéro trop long (maximum 15 chiffres)" }
+  }
+  
+  if (!/^\d+$/.test(phone)) {
+    return { valid: false, error: "Le numéro ne doit contenir que des chiffres" }
+  }
+  
+  return { valid: true, phone: phone }
+}
+
 // ================== ROUTES ==================
-
-// Route racine - servir l'index.html
 app.get("/", (req, res) => {
-  const indexPath = path.join(PUBLIC_DIR, "index.html")
-  if (fs.existsSync(indexPath)) {
-    res.sendFile(indexPath)
-  } else {
-    // Si index.html n'existe pas, créer un fichier par défaut
-    const defaultHTML = `
-<!DOCTYPE html>
-<html>
-<head>
-    <title>HEXGATE WhatsApp Bot</title>
-    <style>
-        body { font-family: Arial; padding: 40px; text-align: center; }
-        .status { padding: 20px; background: #f0f0f0; border-radius: 10px; margin: 20px; }
-    </style>
-</head>
-<body>
-    <h1>🤖 HEXGATE V2</h1>
-    <div class="status">
-        <p>Le bot est en ligne</p>
-        <p>Session active: ${Object.keys(activeSockets).length}</p>
-    </div>
-    <p>Téléchargez l'interface complète depuis: <a href="https://github.com/hextech/hexgate">GitHub</a></p>
-</body>
-</html>
-    `
-    res.send(defaultHTML)
-  }
+  res.sendFile(path.join(PUBLIC_DIR, "index.html"))
 })
 
-// ================== BOT STATUS API ==================
+// API pour vérifier le statut
 app.get("/api/bot-status", (req, res) => {
-  try {
-    res.json({
-      success: true,
-      ready: botReady,
-      sessions: Object.keys(activeSockets).length,
-      commands: Array.from(commands.keys()),
-      timestamp: new Date().toISOString(),
-      version: "HEXGATE V2.0"
-    })
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: error.message
-    })
-  }
+  res.json({
+    success: true,
+    ready: botReady,
+    sessions: Object.keys(activeSockets).length,
+    timestamp: new Date().toISOString(),
+    version: "HEXGATE V2.0"
+  })
 })
 
-// ================== GENERATE PAIR CODE API ==================
+// API pour générer le code pair
 app.post("/api/generate-pair-code", async (req, res) => {
-  console.log("📱 Requête reçue pour générer un code pair:", req.body)
+  console.log("📱 Requête pour générer un code pair:", req.body)
   
   try {
     let phone = req.body.phone
@@ -196,60 +178,77 @@ app.post("/api/generate-pair-code", async (req, res) => {
       })
     }
 
-    // Nettoyer le numéro
-    phone = phone.replace(/\D/g, "")
-    if (!phone) {
-      return res.status(400).json({ 
-        success: false, 
-        error: "Numéro invalide" 
+    // Valider et formater le numéro
+    const validation = validatePhoneNumber(phone)
+    if (!validation.valid) {
+      return res.status(400).json({
+        success: false,
+        error: validation.error
       })
     }
 
-    // Ajouter l'indicatif pays si manquant
-    if (!phone.startsWith("243")) {
-      phone = "243" + phone
+    phone = validation.phone
+    const fullNumber = `${phone}@s.whatsapp.net`
+    
+    console.log(`📞 Numéro à traiter: ${phone} (${fullNumber})`)
+
+    // Vérifier les tentatives récentes (anti-spam)
+    const now = Date.now()
+    const lastAttempt = pairingAttempts.get(phone) || 0
+    const timeSinceLastAttempt = now - lastAttempt
+    
+    if (timeSinceLastAttempt < 30000) { // 30 secondes entre les tentatives
+      const waitTime = Math.ceil((30000 - timeSinceLastAttempt) / 1000)
+      return res.status(429).json({
+        success: false,
+        error: `Veuillez attendre ${waitTime} secondes avant une nouvelle tentative`
+      })
     }
 
-    console.log(`📞 Traitement du numéro: ${phone}`)
+    pairingAttempts.set(phone, now)
 
-    // Vérifier si une session existe déjà pour ce numéro
+    // Nettoyer les anciennes tentatives
+    setTimeout(() => {
+      pairingAttempts.delete(phone)
+    }, 60000)
+
+    // Si une session existe déjà, la nettoyer
     if (activeSockets[phone]) {
-      console.log(`⚠️ Session existante pour ${phone}, déconnexion...`)
+      console.log(`⚠️ Nettoyage de l'ancienne session pour ${phone}`)
       try {
         await activeSockets[phone].logout()
-      } catch (e) {}
+      } catch (e) {
+        console.log("ℹ️ Erreur lors du logout:", e.message)
+      }
       delete activeSockets[phone]
     }
 
     // Créer le dossier de session
     const sessionPath = path.join(SESSIONS_DIR, phone)
     if (!fs.existsSync(sessionPath)) {
-      try {
-        fs.mkdirSync(sessionPath, { recursive: true })
-        console.log(`📁 Dossier session créé : ${sessionPath}`)
-      } catch (mkdirErr) {
-        console.error("❌ Erreur création dossier session:", mkdirErr.message)
-        return res.status(500).json({
-          success: false,
-          error: "Erreur système lors de la création de session"
-        })
-      }
+      fs.mkdirSync(sessionPath, { recursive: true })
     }
 
-    // Charger l'état d'authentification
-    console.log("🔐 Chargement de l'état d'authentification...")
+    // Configuration améliorée du socket
     const { state, saveCreds } = await useMultiFileAuthState(sessionPath)
 
-    // Configurer le socket
     const sock = makeWASocket({
       auth: state,
       printQRInTerminal: true,
-      logger: Pino({ level: "silent" }),
-      browser: ["HEXGATE", "Chrome", "4.0.0"],
+      logger: Pino({ level: 'fatal' }), // Réduire les logs
+      browser: ["Ubuntu", "Chrome", "120.0.0.0"],
       syncFullHistory: false,
       markOnlineOnConnect: false,
-      emitOwnEvents: true,
-      defaultQueryTimeoutMs: 60000
+      retryRequestDelayMs: 1000,
+      maxRetries: 3,
+      connectTimeoutMs: 60000,
+      keepAliveIntervalMs: 30000,
+      emitOwnEvents: false,
+      defaultQueryTimeoutMs: 60000,
+      transactionOpts: {
+        maxRetries: 3,
+        delay: 1000
+      }
     })
 
     // Stocker le socket
@@ -258,25 +257,22 @@ app.post("/api/generate-pair-code", async (req, res) => {
     // Sauvegarder les credentials
     sock.ev.on("creds.update", saveCreds)
 
-    // Activer les commandes
-    handleMessages(sock)
-
-    // Variables pour gérer la connexion
+    // Gestion améliorée des événements de connexion
     let connectionTimeout
-    let qrReceived = false
+    let isConnected = false
 
     sock.ev.on("connection.update", async (update) => {
       const { connection, lastDisconnect, qr } = update
+      
+      console.log(`📡 État connexion ${phone}: ${connection}`)
 
-      console.log(`📡 État connexion pour ${phone}:`, connection)
-
-      if (qr && !qrReceived) {
-        console.log(`📱 QR reçu pour ${phone}`)
-        qrReceived = true
+      if (qr) {
+        console.log(`📱 QR code généré pour ${phone}`)
       }
 
       if (connection === "open") {
         console.log(`✅ WhatsApp connecté : ${phone}`)
+        isConnected = true
         botReady = true
         
         if (connectionTimeout) {
@@ -289,50 +285,65 @@ app.post("/api/generate-pair-code", async (req, res) => {
             text: `🟢 NOUVELLE CONNEXION HEXGATE\n\n📱 Numéro : ${phone}\n🕒 ${new Date().toLocaleString()}\n✅ Session active`
           })
         } catch (notifyErr) {
-          console.log("ℹ️ Impossible de notifier le propriétaire:", notifyErr.message)
+          console.log("ℹ️ Notification échouée:", notifyErr.message)
         }
       }
 
       if (connection === "close") {
+        console.log(`❌ Déconnexion pour ${phone}`)
+        
+        if (connectionTimeout) {
+          clearTimeout(connectionTimeout)
+        }
+
         const reason = lastDisconnect?.error?.output?.statusCode
-        console.log(`❌ Déconnexion pour ${phone}:`, reason || "Raison inconnue")
+        const errorMessage = lastDisconnect?.error?.message || "Unknown error"
+        
+        console.log(`⚠️ Raison déconnexion: ${reason || errorMessage}`)
 
         if (reason === DisconnectReason.loggedOut) {
           try {
             fs.rmSync(sessionPath, { recursive: true, force: true })
             console.log(`🗑️ Session supprimée : ${phone}`)
           } catch (cleanErr) {
-            console.log("⚠️ Impossible de nettoyer la session:", cleanErr.message)
+            console.log("⚠️ Nettoyage échoué:", cleanErr.message)
           }
-          delete activeSockets[phone]
         }
 
+        delete activeSockets[phone]
+        isConnected = false
         botReady = false
-        
-        if (connectionTimeout) {
-          clearTimeout(connectionTimeout)
-        }
       }
     })
 
-    // Timeout pour la génération du code
-    connectionTimeout = setTimeout(() => {
-      if (!botReady) {
-        console.log(`⏱️ Timeout pour la génération du code pour ${phone}`)
+    // Timeout de connexion
+    connectionTimeout = setTimeout(async () => {
+      if (!isConnected) {
+        console.log(`⏱️ Timeout de connexion pour ${phone}`)
+        
         try {
-          sock.logout()
-        } catch (e) {}
+          await sock.logout()
+          console.log(`🔒 Déconnexion forcée pour ${phone}`)
+        } catch (e) {
+          console.log("ℹ️ Déconnexion échouée:", e.message)
+        }
+        
         delete activeSockets[phone]
+        
+        res.status(408).json({
+          success: false,
+          error: "Timeout de connexion. Veuillez réessayer."
+        })
       }
-    }, 30000) // 30 secondes timeout
+    }, 45000) // 45 secondes
 
-    // Générer le code de pairing
+    // Générer le code de pairing avec retry
     try {
       console.log(`🔢 Génération du code pairing pour ${phone}...`)
-      const code = await sock.requestPairingCode(`${phone}@s.whatsapp.net`)
+      
+      const code = await sock.requestPairingCode(fullNumber)
       console.log(`✅ Code pairing généré pour ${phone}: ${code}`)
       
-      // Arrêter le timeout
       clearTimeout(connectionTimeout)
       
       res.json({
@@ -340,82 +351,69 @@ app.post("/api/generate-pair-code", async (req, res) => {
         code: code,
         phone: phone,
         message: "Code généré avec succès",
-        expiresIn: 300 // 5 minutes en secondes
+        expiresIn: 300
       })
       
-    } catch (pairErr) {
-      console.error("❌ Erreur génération code pairing:", pairErr.message)
+    } catch (error) {
+      console.error("❌ Erreur génération code pairing:", error.message)
       
-      // Nettoyer en cas d'erreur
       clearTimeout(connectionTimeout)
+      
       delete activeSockets[phone]
+      
       try {
-        sock.logout()
+        await sock.logout()
       } catch (e) {}
+      
+      let errorMessage = "Erreur lors de la génération du code"
+      
+      if (error.message.includes("Connection Closed")) {
+        errorMessage = "Connexion refusée par WhatsApp. Veuillez réessayer plus tard."
+      } else if (error.message.includes("timeout")) {
+        errorMessage = "Timeout de connexion. Vérifiez votre connexion internet."
+      } else if (error.message.includes("rate limit")) {
+        errorMessage = "Trop de tentatives. Veuillez patienter quelques minutes."
+      }
       
       res.status(500).json({
         success: false,
-        error: pairErr.message || "Erreur lors de la génération du code pairing"
+        error: errorMessage,
+        details: error.message
       })
     }
 
-  } catch (err) {
-    console.error("❌ Erreur globale:", err)
+  } catch (error) {
+    console.error("❌ Erreur globale:", error)
     res.status(500).json({
       success: false,
-      error: err.message || "Erreur lors de la génération du code"
+      error: "Erreur interne du serveur",
+      details: error.message
     })
   }
 })
 
 // ================== MESSAGE HANDLER ==================
 function handleMessages(sock) {
-  sock.ev.on("messages.upsert", async ({ messages, type }) => {
+  sock.ev.on("messages.upsert", async ({ messages }) => {
     try {
-      if (type !== "notify") return
-
       const msg = messages[0]
       if (!msg.message || msg.key.fromMe) return
 
-      // Extraire le texte du message
-      const messageTypes = [
-        'conversation',
-        'extendedTextMessage',
-        'imageMessage',
-        'videoMessage',
-        'audioMessage'
-      ]
+      const text = msg.message.conversation || 
+                   msg.message.extendedTextMessage?.text
 
-      let text = ''
-      for (const type of messageTypes) {
-        if (msg.message[type]) {
-          if (type === 'conversation') {
-            text = msg.message[type]
-          } else if (msg.message[type].text) {
-            text = msg.message[type].text
-          }
-          break
+      if (text && text.startsWith(".")) {
+        const args = text.slice(1).trim().split(/ +/)
+        const cmdName = args.shift().toLowerCase()
+        const command = commands.get(cmdName)
+
+        if (command) {
+          console.log(`📝 Commande exécutée: .${cmdName}`)
+          await command.execute(sock, msg, args)
         }
       }
-
-      if (!text || !text.startsWith(".")) return
-
-      const args = text.slice(1).trim().split(/ +/)
-      const cmdName = args.shift().toLowerCase()
-
-      const command = commands.get(cmdName)
-      if (!command) {
-        await sock.sendMessage(msg.key.remoteJid, {
-          text: `❌ Commande non trouvée: .${cmdName}\n\n📝 Tapez .help pour voir les commandes disponibles`
-        })
-        return
-      }
-
-      console.log(`📝 Commande exécutée: .${cmdName} par ${msg.key.remoteJid}`)
-      await command.execute(sock, msg, args)
-
-    } catch (e) {
-      console.error("❌ Erreur traitement message:", e)
+    } catch (error) {
+      console.error("❌ Erreur traitement message:", error)
     }
   })
 }
@@ -426,18 +424,42 @@ app.get("/health", (req, res) => {
     status: "healthy",
     timestamp: new Date().toISOString(),
     sessions: Object.keys(activeSockets).length,
-    botReady: botReady,
-    platform: process.platform,
     version: "HEXGATE V2.0"
   })
 })
 
-// ================== 404 HANDLER ==================
-app.use((req, res) => {
-  res.status(404).json({
-    success: false,
-    error: "Route non trouvée"
-  })
+// ================== CLEANUP ENDPOINT ==================
+app.post("/api/cleanup-session", async (req, res) => {
+  try {
+    const { phone } = req.body
+    if (!phone) {
+      return res.status(400).json({ 
+        success: false, 
+        error: "Numéro manquant" 
+      })
+    }
+
+    if (activeSockets[phone]) {
+      await activeSockets[phone].logout()
+      delete activeSockets[phone]
+    }
+
+    const sessionPath = path.join(SESSIONS_DIR, phone)
+    if (fs.existsSync(sessionPath)) {
+      fs.rmSync(sessionPath, { recursive: true, force: true })
+    }
+
+    res.json({
+      success: true,
+      message: "Session nettoyée avec succès"
+    })
+
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error.message
+    })
+  }
 })
 
 // ================== START SERVER ==================
@@ -451,15 +473,13 @@ app.listen(PORT, "0.0.0.0", () => {
 ║ 🔧 Env: ${process.env.RENDER ? 'Render' : 'Local'}${" ".repeat(31 - (process.env.RENDER ? 6 : 6))}║
 ╚════════════════════════════════════════╝
 
-📋 Endpoints:
-  GET  /              → Interface web
-  GET  /api/bot-status → Statut du bot
+📋 Endpoints disponibles:
+  GET  /                    → Interface web
+  GET  /api/bot-status      → Statut du bot
   POST /api/generate-pair-code → Générer code
-  GET  /health        → Santé serveur
+  POST /api/cleanup-session → Nettoyer session
+  GET  /health              → Santé serveur
   `)
-  
-  // Charger les commandes
-  loadCommands()
 })
 
 // ================== ERROR HANDLING ==================
@@ -471,13 +491,18 @@ process.on("unhandledRejection", (reason, promise) => {
   console.error("⚠️ Rejet non géré:", reason)
 })
 
-process.on("SIGINT", () => {
+process.on("SIGINT", async () => {
   console.log("\n👋 Arrêt du bot...")
-  Object.values(activeSockets).forEach(sock => {
+  
+  for (const [phone, sock] of Object.entries(activeSockets)) {
     try {
-      sock.logout()
-    } catch (e) {}
-  })
+      await sock.logout()
+      console.log(`✅ Déconnecté: ${phone}`)
+    } catch (error) {
+      console.log(`⚠️ Erreur déconnexion ${phone}:`, error.message)
+    }
+  }
+  
   console.log("✅ Nettoyage terminé")
   process.exit(0)
 })
