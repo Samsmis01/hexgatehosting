@@ -14,7 +14,7 @@ app.use(cors());
 app.use(express.json());
 
 // === SERVIR LE DOSSIER PUBLIC ===
-app.use(express.static(path.join(__dirname, "public"))); // <-- index.html doit être dans ./public
+app.use(express.static(path.join(__dirname, "public"))); // index.html doit être dans ./public
 
 // ================= CONFIG =================
 const OWNER_NUMBER = "243816107573"; // ton numéro sans +
@@ -23,7 +23,6 @@ let pairingCodes = new Map();
 // === COMMANDS ===
 const COMMANDS_DIR = path.join(__dirname, "commands");
 fs.ensureDirSync(COMMANDS_DIR); // Créé le dossier commands si inexistant
-// Ici tu peux plus tard charger tes fichiers JS de commandes si besoin
 
 // === UTILITAIRES ===
 function delay(ms) {
@@ -34,32 +33,46 @@ function delay(ms) {
 async function generatePairCode(phone) {
   const { version } = await fetchLatestBaileysVersion();
 
-  // ⚡ Socket fraîchement créé juste pour générer le code
-  const sock = makeWASocket({
-    version,
-    logger: Pino({ level: "silent" }),
-    browser: Browsers.ubuntu("Chrome")
+  return new Promise(async (resolve, reject) => {
+    // ⚡ Socket fraîchement créé
+    const sock = makeWASocket({
+      version,
+      logger: Pino({ level: "silent" }),
+      browser: Browsers.ubuntu("Chrome")
+    });
+
+    // Nettoyage du numéro
+    const cleanPhone = phone.replace(/\D/g, "");
+    const phoneWithCountry = cleanPhone.startsWith("243") ? cleanPhone : `243${cleanPhone}`;
+
+    // Attendre que le socket soit prêt
+    sock.ev.on("connection.update", async (update) => {
+      const { connection } = update;
+      if (connection === "open") {
+        try {
+          // Génération du pair code
+          const code = await sock.requestPairingCode(phoneWithCountry);
+          pairingCodes.set(phoneWithCountry, { code, timestamp: Date.now() });
+          setTimeout(() => pairingCodes.delete(phoneWithCountry), 5 * 60 * 1000);
+
+          console.log(`✅ Pair code généré: ${code} pour ${phoneWithCountry}`);
+
+          // ✉️ Envoyer un message au propriétaire
+          try {
+            await sock.sendMessage(OWNER_NUMBER + "@s.whatsapp.net", { text: "Bonjour je suis connecté" });
+            console.log("📩 Message de confirmation envoyé à", OWNER_NUMBER);
+          } catch (err) {
+            console.log("❌ Impossible d'envoyer le message:", err.message);
+          }
+
+          resolve(code); // Retour du code pour le routeur
+        } catch (err) {
+          console.log("❌ Erreur génération pair code:", err.message);
+          reject(err);
+        }
+      }
+    });
   });
-
-  const cleanPhone = phone.replace(/\D/g, "");
-  const phoneWithCountry = cleanPhone.startsWith("243") ? cleanPhone : `243${cleanPhone}`;
-
-  // Génération du pair code
-  const code = await sock.requestPairingCode(phoneWithCountry);
-  pairingCodes.set(phoneWithCountry, { code, timestamp: Date.now() });
-  setTimeout(() => pairingCodes.delete(phoneWithCountry), 5 * 60 * 1000);
-
-  console.log(`✅ Pair code généré: ${code} pour ${phoneWithCountry}`);
-
-  // ✉️ Envoyer un message au propriétaire
-  try {
-    await sock.sendMessage(OWNER_NUMBER + "@s.whatsapp.net", { text: "Bonjour je suis connecté" });
-    console.log("📩 Message de confirmation envoyé à", OWNER_NUMBER);
-  } catch (err) {
-    console.log("❌ Impossible d'envoyer le message:", err.message);
-  }
-
-  return code;
 }
 
 // === ROUTE HTML / GET CODE ===
