@@ -21,7 +21,7 @@ app.use(express.json());
 app.use(express.static("public"));
 
 // ================= CONFIG =================
-const OWNER_NUMBER = "243812345678"; // sans +
+const OWNER_NUMBER = "243816107573"; // sans +
 const BASE_DIR = __dirname;
 const SESSION_DIR = path.join(BASE_DIR, "session");
 
