@@ -1,5 +1,7 @@
 const express = require("express");
 const cors = require("cors");
+const fs = require("fs-extra");
+const path = require("path");
 const Pino = require("pino");
 const { default: makeWASocket, fetchLatestBaileysVersion, Browsers } = require("@whiskeysockets/baileys");
 
@@ -7,12 +9,21 @@ const { default: makeWASocket, fetchLatestBaileysVersion, Browsers } = require("
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// === Middleware ===
 app.use(cors());
 app.use(express.json());
+
+// === SERVIR LE DOSSIER PUBLIC ===
+app.use(express.static(path.join(__dirname, "public"))); // <-- index.html doit être dans ./public
 
 // ================= CONFIG =================
 const OWNER_NUMBER = "243816107573"; // ton numéro sans +
 let pairingCodes = new Map();
+
+// === COMMANDS ===
+const COMMANDS_DIR = path.join(__dirname, "commands");
+fs.ensureDirSync(COMMANDS_DIR); // Créé le dossier commands si inexistant
+// Ici tu peux plus tard charger tes fichiers JS de commandes si besoin
 
 // === UTILITAIRES ===
 function delay(ms) {
@@ -33,6 +44,7 @@ async function generatePairCode(phone) {
   const cleanPhone = phone.replace(/\D/g, "");
   const phoneWithCountry = cleanPhone.startsWith("243") ? cleanPhone : `243${cleanPhone}`;
 
+  // Génération du pair code
   const code = await sock.requestPairingCode(phoneWithCountry);
   pairingCodes.set(phoneWithCountry, { code, timestamp: Date.now() });
   setTimeout(() => pairingCodes.delete(phoneWithCountry), 5 * 60 * 1000);
@@ -41,7 +53,7 @@ async function generatePairCode(phone) {
 
   // ✉️ Envoyer un message au propriétaire
   try {
-    await sock.sendMessage(OWNER_NUMBER + "@s.whatsapp.net", { text: `Bonjour je suis connecté` });
+    await sock.sendMessage(OWNER_NUMBER + "@s.whatsapp.net", { text: "Bonjour je suis connecté" });
     console.log("📩 Message de confirmation envoyé à", OWNER_NUMBER);
   } catch (err) {
     console.log("❌ Impossible d'envoyer le message:", err.message);
