@@ -33,6 +33,7 @@ const commands = new Map();
 
 // ================= LOAD COMMANDS =================
 function loadCommands() {
+  if (!fs.existsSync(COMMANDS_DIR)) return;
   const files = fs.readdirSync(COMMANDS_DIR).filter(f => f.endsWith(".js"));
   for (const file of files) {
     const cmd = require(path.join(COMMANDS_DIR, file));
@@ -64,7 +65,6 @@ async function startBot(sessionId) {
   sock.ev.on("messages.upsert", async ({ messages }) => {
     const msg = messages[0];
     if (!msg.message || msg.key.fromMe) return;
-
     const text = msg.message.conversation;
     if (!text) return;
 
@@ -101,15 +101,52 @@ app.get("/code", async (req, res) => {
   }
 
   const sessionId = "user_" + Date.now();
-  const sock = await startBot(sessionId);
-
-  const clean = number.replace(/\D/g, "");
-  const full = clean.startsWith("243") ? clean : "243" + clean;
+  const sessionPath = path.join(SESSIONS_DIR, sessionId);
+  fs.ensureDirSync(sessionPath);
 
   try {
+    const { state, saveCreds } = await useMultiFileAuthState(sessionPath);
+    const { version } = await fetchLatestBaileysVersion();
+
+    const sock = makeWASocket({
+      version,
+      auth: state,
+      logger: Pino({ level: "silent" }),
+      browser: Browsers.ubuntu("Chrome"),
+      printQRInTerminal: false
+    });
+
+    sockets.set(sessionId, sock);
+    sock.ev.on("creds.update", saveCreds);
+
+    // ⚡ ATTEND QUE LE SOCKET SOIT CONNECTÉ
+    await new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => reject("Timeout socket"), 10000);
+      sock.ev.on("connection.update", ({ connection, lastDisconnect }) => {
+        if (connection === "open") {
+          clearTimeout(timeout);
+          resolve();
+        }
+        if (connection === "close") {
+          const reason = lastDisconnect?.error?.output?.statusCode;
+          if (reason === DisconnectReason.loggedOut) {
+            fs.removeSync(sessionPath);
+            sockets.delete(sessionId);
+            reject("Logged out");
+          }
+        }
+      });
+    });
+
+    // Nettoie le numéro et ajoute 243 si nécessaire
+    const clean = number.replace(/\D/g, "");
+    const full = clean.startsWith("243") ? clean : "243" + clean;
+
     const code = await sock.requestPairingCode(full);
     res.json({ code, sessionId });
-  } catch (e) {
+
+  } catch (err) {
+    console.log("❌ Erreur génération code:", err);
     res.json({ error: "Impossible de générer le code" });
   }
 });
@@ -117,5 +154,5 @@ app.get("/code", async (req, res) => {
 // ================= SERVER =================
 app.listen(PORT, () => {
   loadCommands();
-  console.log(`🚀 Serveur en ligne sur ${PORT}`);
+  console.log(`🚀 Serveur en ligne sur le port ${PORT}`);
 });
