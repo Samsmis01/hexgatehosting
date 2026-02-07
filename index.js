@@ -3,7 +3,6 @@ const cors = require("cors");
 const fs = require("fs-extra");
 const path = require("path");
 const Pino = require("pino");
-const { exec } = require("child_process");
 
 const {
   default: makeWASocket,
@@ -22,100 +21,101 @@ app.use(express.json());
 app.use(express.static(path.join(__dirname, "public")));
 
 // ================= CONFIG =================
-const SESSION_DIR = path.join(__dirname, "session");
-fs.ensureDirSync(SESSION_DIR);
+const SESSIONS_DIR = path.join(__dirname, "sessions");
+const COMMANDS_DIR = path.join(__dirname, "commands");
+const MAX_SESSIONS = 10;
 
-// ================= BOT GLOBAL =================
-let sock = null;
+fs.ensureDirSync(SESSIONS_DIR);
 
-// ================= UTIL =================
-const delay = ms => new Promise(r => setTimeout(r, ms));
+// ================= GLOBAL =================
+const sockets = new Map();
+const commands = new Map();
+
+// ================= LOAD COMMANDS =================
+function loadCommands() {
+  const files = fs.readdirSync(COMMANDS_DIR).filter(f => f.endsWith(".js"));
+  for (const file of files) {
+    const cmd = require(path.join(COMMANDS_DIR, file));
+    commands.set(cmd.name, cmd);
+  }
+  console.log(`✅ ${commands.size} commandes chargées`);
+}
 
 // ================= START BOT =================
-async function startBot() {
-  try {
-    const { state, saveCreds } = await useMultiFileAuthState(SESSION_DIR);
-    const { version } = await fetchLatestBaileysVersion();
+async function startBot(sessionId) {
+  const sessionPath = path.join(SESSIONS_DIR, sessionId);
+  fs.ensureDirSync(sessionPath);
 
-    sock = makeWASocket({
-      version,
-      logger: Pino({ level: "silent" }),
-      auth: state,
-      browser: Browsers.ubuntu("Chrome"),
-      printQRInTerminal: false,
-      markOnlineOnConnect: true,
-      syncFullHistory: false
-    });
+  const { state, saveCreds } = await useMultiFileAuthState(sessionPath);
+  const { version } = await fetchLatestBaileysVersion();
 
-    sock.ev.on("creds.update", saveCreds);
+  const sock = makeWASocket({
+    version,
+    auth: state,
+    logger: Pino({ level: "silent" }),
+    browser: Browsers.ubuntu("Chrome"),
+    printQRInTerminal: false
+  });
 
-    sock.ev.on("connection.update", async ({ connection, lastDisconnect }) => {
-      if (connection === "open") {
-        console.log("✅ WhatsApp connecté (session active)");
+  sockets.set(sessionId, sock);
+
+  sock.ev.on("creds.update", saveCreds);
+
+  sock.ev.on("messages.upsert", async ({ messages }) => {
+    const msg = messages[0];
+    if (!msg.message || msg.key.fromMe) return;
+
+    const text = msg.message.conversation;
+    if (!text) return;
+
+    const cmdName = text.split(" ")[0].toLowerCase();
+    const cmd = commands.get(cmdName);
+    if (cmd) cmd.execute(sock, msg);
+  });
+
+  sock.ev.on("connection.update", ({ connection, lastDisconnect }) => {
+    if (connection === "open") {
+      console.log(`✅ Session ${sessionId} connectée`);
+    }
+
+    if (connection === "close") {
+      const reason = lastDisconnect?.error?.output?.statusCode;
+      if (reason === DisconnectReason.loggedOut) {
+        fs.removeSync(sessionPath);
+        sockets.delete(sessionId);
+        console.log(`❌ Session ${sessionId} supprimée`);
       }
+    }
+  });
 
-      if (connection === "close") {
-        const reason = lastDisconnect?.error?.output?.statusCode;
-
-        if (reason === DisconnectReason.loggedOut) {
-          console.log("❌ Déconnecté (logout), suppression session");
-          exec(`rm -rf ${SESSION_DIR}`, async () => {
-            fs.ensureDirSync(SESSION_DIR);
-            await startBot();
-          });
-        } else {
-          console.log("⚠️ Déconnexion, reconnexion...");
-          await delay(4000);
-          await startBot();
-        }
-      }
-    });
-
-  } catch (err) {
-    console.log("❌ Erreur démarrage bot:", err.message);
-    setTimeout(startBot, 5000);
-  }
+  return sock;
 }
 
 // ================= PAIR CODE =================
-async function generatePairCode(phone) {
-  if (!sock) {
-    console.log("❌ Socket non prêt");
-    return null;
+app.get("/code", async (req, res) => {
+  const number = req.query.number;
+  if (!number) return res.json({ error: "Numéro manquant" });
+
+  if (sockets.size >= MAX_SESSIONS) {
+    return res.json({ error: "Limite de sessions atteinte" });
   }
 
-  const clean = phone.replace(/\D/g, "");
+  const sessionId = "user_" + Date.now();
+  const sock = await startBot(sessionId);
+
+  const clean = number.replace(/\D/g, "");
   const full = clean.startsWith("243") ? clean : "243" + clean;
 
   try {
     const code = await sock.requestPairingCode(full);
-    console.log("✅ Pair code généré:", code);
-    return code;
-  } catch (err) {
-    console.log("❌ Pair code error:", err.message);
-    return null;
+    res.json({ code, sessionId });
+  } catch (e) {
+    res.json({ error: "Impossible de générer le code" });
   }
-}
-
-// ================= ROUTE API =================
-app.get("/code", async (req, res) => {
-  const number = req.query.number;
-  if (!number) {
-    return res.json({ error: "Numéro manquant" });
-  }
-
-  const code = await generatePairCode(number);
-  if (!code) {
-    return res.json({ error: "Impossible de générer le code" });
-  }
-
-  res.json({ code });
 });
 
 // ================= SERVER =================
 app.listen(PORT, () => {
-  console.log(`🚀 Serveur lancé sur le port ${PORT}`);
+  loadCommands();
+  console.log(`🚀 Serveur en ligne sur ${PORT}`);
 });
-
-// ================= INIT =================
-startBot();
