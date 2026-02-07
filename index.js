@@ -3,76 +3,112 @@ const cors = require("cors");
 const fs = require("fs-extra");
 const path = require("path");
 const Pino = require("pino");
-const { default: makeWASocket, fetchLatestBaileysVersion, Browsers } = require("@whiskeysockets/baileys");
+const { exec } = require("child_process");
+const {
+  default: makeWASocket,
+  useMultiFileAuthState,
+  DisconnectReason,
+  fetchLatestBaileysVersion,
+  Browsers
+} = require("@whiskeysockets/baileys");
 
 // ================= APP =================
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// === Middleware ===
+// Middleware
 app.use(cors());
 app.use(express.json());
-
-// === SERVIR LE DOSSIER PUBLIC ===
-app.use(express.static(path.join(__dirname, "public"))); // index.html doit être dans ./public
+app.use(express.static(path.join(__dirname, "public"))); // <-- ton index.html ici
 
 // ================= CONFIG =================
 const OWNER_NUMBER = "243816107573"; // ton numéro sans +
-let pairingCodes = new Map();
+const SESSION_DIR = path.join(__dirname, "session");
+fs.ensureDirSync(SESSION_DIR);
 
-// === COMMANDS ===
-const COMMANDS_DIR = path.join(__dirname, "commands");
-fs.ensureDirSync(COMMANDS_DIR); // Créé le dossier commands si inexistant
+// === BOT GLOBAL ===
+let sock = null;
+let botReady = false;
+let pairingCodes = new Map();
 
 // === UTILITAIRES ===
 function delay(ms) {
   return new Promise(res => setTimeout(res, ms));
 }
 
-// === GENERATION DU PAIR CODE ===
-async function generatePairCode(phone) {
-  const { version } = await fetchLatestBaileysVersion();
+// === START BOT ===
+async function startBot() {
+  try {
+    const { state, saveCreds } = await useMultiFileAuthState(SESSION_DIR);
+    const { version } = await fetchLatestBaileysVersion();
 
-  return new Promise(async (resolve, reject) => {
-    // ⚡ Socket fraîchement créé
-    const sock = makeWASocket({
+    sock = makeWASocket({
       version,
       logger: Pino({ level: "silent" }),
-      browser: Browsers.ubuntu("Chrome")
+      printQRInTerminal: true, // affiche QR la première fois
+      auth: state,
+      browser: Browsers.ubuntu("Chrome"),
+      markOnlineOnConnect: true,
+      syncFullHistory: false
     });
 
-    // Nettoyage du numéro
-    const cleanPhone = phone.replace(/\D/g, "");
-    const phoneWithCountry = cleanPhone.startsWith("243") ? cleanPhone : `243${cleanPhone}`;
+    sock.ev.on("creds.update", saveCreds);
 
-    // Attendre que le socket soit prêt
-    sock.ev.on("connection.update", async (update) => {
-      const { connection } = update;
+    sock.ev.on("connection.update", async ({ connection, lastDisconnect, qr }) => {
+      if (qr) {
+        console.log("📱 Scanner ce QR code sur WhatsApp Web pour connecter le bot !");
+      }
+
       if (connection === "open") {
-        try {
-          // Génération du pair code
-          const code = await sock.requestPairingCode(phoneWithCountry);
-          pairingCodes.set(phoneWithCountry, { code, timestamp: Date.now() });
-          setTimeout(() => pairingCodes.delete(phoneWithCountry), 5 * 60 * 1000);
+        console.log("✅ Bot connecté et prêt !");
+        botReady = true;
+      }
 
-          console.log(`✅ Pair code généré: ${code} pour ${phoneWithCountry}`);
-
-          // ✉️ Envoyer un message au propriétaire
-          try {
-            await sock.sendMessage(OWNER_NUMBER + "@s.whatsapp.net", { text: "Bonjour je suis connecté" });
-            console.log("📩 Message de confirmation envoyé à", OWNER_NUMBER);
-          } catch (err) {
-            console.log("❌ Impossible d'envoyer le message:", err.message);
-          }
-
-          resolve(code); // Retour du code pour le routeur
-        } catch (err) {
-          console.log("❌ Erreur génération pair code:", err.message);
-          reject(err);
+      if (connection === "close") {
+        const reason = lastDisconnect?.error?.output?.statusCode;
+        if (reason === DisconnectReason.loggedOut) {
+          console.log("❌ Déconnecté, suppression de session...");
+          exec(`rm -rf ${SESSION_DIR}`, async () => {
+            fs.ensureDirSync(SESSION_DIR);
+            console.log("🔄 Redémarrage du bot...");
+            await startBot();
+          });
+        } else {
+          console.log("⚠️ Connexion fermée, tentative de reconnexion...");
+          await delay(5000);
+          await startBot();
         }
       }
     });
-  });
+
+  } catch (err) {
+    console.log("❌ Erreur démarrage bot:", err.message);
+    setTimeout(startBot, 5000);
+  }
+}
+
+// === GENERATION DU PAIR CODE ===
+async function generatePairCode(phone) {
+  if (!sock || !botReady) {
+    console.log("❌ Bot non prêt pour générer le pair code");
+    return null;
+  }
+
+  const cleanPhone = phone.replace(/\D/g, "");
+  const phoneWithCountry = cleanPhone.startsWith("243") ? cleanPhone : `243${cleanPhone}`;
+
+  try {
+    const code = await sock.requestPairingCode(phoneWithCountry);
+    pairingCodes.set(phoneWithCountry, { code, timestamp: Date.now() });
+    setTimeout(() => pairingCodes.delete(phoneWithCountry), 5 * 60 * 1000);
+
+    console.log(`✅ Pair code généré: ${code} pour ${phoneWithCountry}`);
+    return code;
+
+  } catch (err) {
+    console.log("❌ Erreur génération pair code:", err.message);
+    return null;
+  }
 }
 
 // === ROUTE HTML / GET CODE ===
@@ -85,6 +121,7 @@ app.get("/code", async (req, res) => {
     if (!code) return res.json({ error: "Impossible de générer le code" });
 
     res.json({ code });
+
   } catch (err) {
     console.error("PAIR ERROR:", err);
     res.status(500).json({ error: "Erreur de service" });
@@ -93,3 +130,6 @@ app.get("/code", async (req, res) => {
 
 // === START SERVER ===
 app.listen(PORT, () => console.log(`✅ Bot en ligne sur le port ${PORT}`));
+
+// === LANCEMENT INITIAL DU BOT ===
+startBot();
