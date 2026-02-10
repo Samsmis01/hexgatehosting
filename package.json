@@ -1,94 +1,41 @@
-version: 1
-
-services:
-  # Service API (server.js + bot intégré)
-  - type: web
-    name: momo-zen
-    env: node
-    region: frankfurt  # ou singapore, ohio, oregon
-    plan: free
-    rootDir: .  # IMPORTANT: Indique le dossier racine
-    
-    # Commande de build
-    buildCommand: |
-      echo "🔧 Installation des dépendances..."
-      npm install
-      echo "📁 Création des dossiers..."
-      mkdir -p public commands viewOnce deleted_messages deleted_images .VV auth_info_baileys
-      echo "✅ Build terminé"
-    
-    # Commande de démarrage UNIQUE (bot + serveur)
-    startCommand: |
-      echo "🚀 Démarrage de MOMO-ZEN..."
-      echo "1. Démarrage du bot WhatsApp en arrière-plan..."
-      node index.js &
-      BOT_PID=$!
-      echo "✅ Bot démarré (PID: $BOT_PID)"
-      
-      echo "2. Attente de 10 secondes pour la connexion WhatsApp..."
-      sleep 10
-      
-      echo "3. Démarrage du serveur API..."
-      node server.js
-      # Note: Le serveur API démarre en premier plan
-    
-    # Port que Render doit surveiller
-    envVars:
-      - key: PORT
-        value: 3000
-      - key: NODE_ENV
-        value: production
-      - key: BOT_PUBLIC
-        value: true
-      - key: RENDER
-        value: "true"
-      - key: DISABLE_QR_TERMINAL
-        value: "true"  # Désactive le QR code dans Render
-    
-    # Configuration du port (CRITIQUE)
-    port: 3000
-    
-    # Health check (essentiel pour Render)
-    healthCheckPath: /health
-    initialDelaySec: 45  # Temps pour que le bot se connecte
-    
-    # Auto-deploy
-    autoDeploy: true
-    
-    # Disque persistant
-    disk:
-      name: data
-      mountPath: /opt/render/project/src/data
-      sizeGB: 1
-    
-    # Headers de sécurité
-    headers:
-      - path: /*
-        name: X-Content-Type-Options
-        value: nosniff
-      - path: /*
-        name: X-Frame-Options
-        value: DENY
-      - path: /*
-        name: X-XSS-Protection
-        value: 1; mode=block
-      - path: /*
-        name: Content-Security-Policy
-        value: "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'"
-    
-    # Domaine personnalisé (optionnel)
-    # domains:
-    #   - momo-zen.onrender.com
-    #   - votre-domaine.com
-
-# Scripts de déploiement
-preDeployCommands:
-  - echo "🔄 Préparation du déploiement Render..."
-  - echo "Node: $(node --version)"
-  - echo "NPM: $(npm --version)"
-
-postDeployCommands:
-  - echo "✅ Déploiement terminé!"
-  - echo "🌐 Votre application est disponible sur: https://${RENDER_SERVICE_NAME}.onrender.com"
-  - echo "🏥 Health check: https://${RENDER_SERVICE_NAME}.onrender.com/health"
-  - echo "📱 Interface: https://${RENDER_SERVICE_NAME}.onrender.com"
+{
+  "name": "momozentech",
+  "version": "2.0.0",
+  "description": "MOMO-ZEN WhatsApp Pairing System - Version Render Optimisée",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "start:bot": "node index.js",
+    "start:combined": "node start-combined.js",
+    "dev": "nodemon server.js",
+    "dev:bot": "nodemon index.js",
+    "dev:combined": "nodemon start-combined.js",
+    "render": "node render-start.js",
+    "test": "node test-render.js",
+    "health": "curl -s https://${RENDER_SERVICE_NAME:-localhost}:${PORT:-3000}/health || echo 'Test local: curl http://localhost:3000/health'",
+    "build": "npm install && mkdir -p public commands viewOnce deleted_messages deleted_images .VV auth_info_baileys",
+    "postinstall": "echo '✅ Dépendances installées. Pour Render: npm run render'",
+    "logs": "echo '📋 Connectez-vous à Render Dashboard pour voir les logs'",
+    "clean": "rm -rf node_modules package-lock.json",
+    "reset": "rm -rf auth_info_baileys node_modules && npm install",
+    "backup": "cp config.json config.backup.json && echo '💾 Backup créé'"
+  },
+  "keywords": ["whatsapp", "bot", "pairing", "api", "render", "hexgate"],
+  "author": "HEX-TECH",
+  "license": "MIT",
+  "engines": {
+    "node": ">=16.0.0",
+    "npm": ">=7.0.0"
+  },
+  "dependencies": {
+    "@whiskeysockets/baileys": "^6.5.0",
+    "express": "^4.18.2",
+    "cors": "^2.8.5",
+    "express-rate-limit": "^7.1.5",
+    "pino": "^8.19.0",
+    "axios": "^1.6.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.2"
+  }
+}
