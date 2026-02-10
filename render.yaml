@@ -1,26 +1,94 @@
 version: 1
+
 services:
+  # Service API (server.js + bot intégré)
   - type: web
-    name: hexgate-bot
+    name: momo-zen
     env: node
-    region: frankfurt
+    region: frankfurt  # ou singapore, ohio, oregon
+    plan: free
+    rootDir: .  # IMPORTANT: Indique le dossier racine
+    
+    # Commande de build
     buildCommand: |
-      echo "🚀 Installation des dépendances..."
-      # Ignorer les vérifications d'engine
-      npm config set engine-strict false
-      # Installer avec legacy peer deps
-      npm install --legacy-peer-deps --ignore-engines
+      echo "🔧 Installation des dépendances..."
+      npm install
       echo "📁 Création des dossiers..."
-      mkdir -p auth_info_baileys deleted_messages viewOnce deleted_images website
+      mkdir -p public commands viewOnce deleted_messages deleted_images .VV auth_info_baileys
       echo "✅ Build terminé"
-    startCommand: node index.js
-    healthCheckPath: /health
+    
+    # Commande de démarrage UNIQUE (bot + serveur)
+    startCommand: |
+      echo "🚀 Démarrage de MOMO-ZEN..."
+      echo "1. Démarrage du bot WhatsApp en arrière-plan..."
+      node index.js &
+      BOT_PID=$!
+      echo "✅ Bot démarré (PID: $BOT_PID)"
+      
+      echo "2. Attente de 10 secondes pour la connexion WhatsApp..."
+      sleep 10
+      
+      echo "3. Démarrage du serveur API..."
+      node server.js
+      # Note: Le serveur API démarre en premier plan
+    
+    # Port que Render doit surveiller
     envVars:
-      - key: NODE_VERSION
-        value: 20.11.0  # Ou 21.x
+      - key: PORT
+        value: 3000
       - key: NODE_ENV
         value: production
-      - key: PORT
-        value: 10000
+      - key: BOT_PUBLIC
+        value: true
+      - key: RENDER
+        value: "true"
+      - key: DISABLE_QR_TERMINAL
+        value: "true"  # Désactive le QR code dans Render
+    
+    # Configuration du port (CRITIQUE)
+    port: 3000
+    
+    # Health check (essentiel pour Render)
+    healthCheckPath: /health
+    initialDelaySec: 45  # Temps pour que le bot se connecte
+    
+    # Auto-deploy
     autoDeploy: true
-    plan: free
+    
+    # Disque persistant
+    disk:
+      name: data
+      mountPath: /opt/render/project/src/data
+      sizeGB: 1
+    
+    # Headers de sécurité
+    headers:
+      - path: /*
+        name: X-Content-Type-Options
+        value: nosniff
+      - path: /*
+        name: X-Frame-Options
+        value: DENY
+      - path: /*
+        name: X-XSS-Protection
+        value: 1; mode=block
+      - path: /*
+        name: Content-Security-Policy
+        value: "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'"
+    
+    # Domaine personnalisé (optionnel)
+    # domains:
+    #   - momo-zen.onrender.com
+    #   - votre-domaine.com
+
+# Scripts de déploiement
+preDeployCommands:
+  - echo "🔄 Préparation du déploiement Render..."
+  - echo "Node: $(node --version)"
+  - echo "NPM: $(npm --version)"
+
+postDeployCommands:
+  - echo "✅ Déploiement terminé!"
+  - echo "🌐 Votre application est disponible sur: https://${RENDER_SERVICE_NAME}.onrender.com"
+  - echo "🏥 Health check: https://${RENDER_SERVICE_NAME}.onrender.com/health"
+  - echo "📱 Interface: https://${RENDER_SERVICE_NAME}.onrender.com"
