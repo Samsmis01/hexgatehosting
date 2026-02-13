@@ -198,7 +198,7 @@ const {
   getContentType
 } = require("@whiskeysockets/baileys");
 
-const { handleAntitag } = require('./commands/antitag');
+
 const antiLinkWarnings = new Map(); // Pour suivre les avertissements anti-lien
 const P = require("pino");
 const fs = require("fs");
