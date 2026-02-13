@@ -1,252 +1,472 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="fr">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>MOMO-ZEN</title>
-
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
-
-<style>
-* {
-  box-sizing: border-box;
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
-}
-
-body {
-  margin: 0;
-  height: 100vh;
-  background: radial-gradient(circle at top, #1e1e2f, #0b0b12);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #fff;
-}
-
-/* CARD */
-.card {
-  width: 92%;
-  max-width: 380px;
-  background: linear-gradient(180deg, #16162a, #10101c);
-  border-radius: 20px;
-  padding: 26px;
-  box-shadow: 0 25px 50px rgba(0,0,0,.7);
-  animation: pop 0.6s ease;
-}
-
-@keyframes pop {
-  from {
-    opacity: 0;
-    transform: translateY(20px) scale(.96);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-}
-
-/* TITLE */
-.card h2 {
-  margin: 0 0 6px;
-  font-size: 22px;
-  font-weight: 700;
-  text-align: center;
-}
-
-.card p {
-  text-align: center;
-  font-size: 14px;
-  color: #9ca3af;
-  margin-bottom: 22px;
-}
-
-/* INPUT */
-.input-box {
-  display: flex;
-  align-items: center;
-  background: #1f1f33;
-  border-radius: 14px;
-  padding: 14px 16px;
-  margin-bottom: 18px;
-  border: 1px solid transparent;
-  transition: .25s ease;
-}
-
-.input-box:focus-within {
-  border-color: #6366f1;
-  box-shadow: 0 0 0 3px rgba(99,102,241,.25);
-}
-
-.input-box i {
-  color: #818cf8;
-  font-size: 18px;
-  margin-right: 12px;
-}
-
-.input-box input {
-  background: transparent;
-  border: none;
-  outline: none;
-  color: #fff;
-  font-size: 16px;
-  width: 100%;
-}
-
-.input-box input::placeholder {
-  color: #6b7280;
-}
-
-/* BUTTON */
-button {
-  width: 100%;
-  border: none;
-  padding: 15px;
-  border-radius: 16px;
-  background: linear-gradient(135deg, #6366f1, #3b82f6);
-  color: #fff;
-  font-size: 15px;
-  font-weight: 700;
-  cursor: pointer;
-  transition: all .2s ease;
-}
-
-button:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 10px 25px rgba(59,130,246,.45);
-}
-
-button:active {
-  transform: scale(.97);
-}
-
-/* RESULT */
-#pair {
-  margin-top: 18px;
-  text-align: center;
-  min-height: 32px;
-}
-
-.loader {
-  width: 22px;
-  height: 22px;
-  border: 3px solid #3b82f6;
-  border-top-color: transparent;
-  border-radius: 50%;
-  margin: auto;
-  animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-  to { transform: rotate(360deg); }
-}
-
-/* COPY BUTTON */
-.copy-btn {
-  margin-top: 12px;
-  padding: 10px 14px;
-  border-radius: 12px;
-  border: none;
-  background: #1f2937;
-  color: #fff;
-  font-size: 14px;
-  font-weight: 600;
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  transition: all .2s ease;
-}
-
-.copy-btn:hover {
-  background: #374151;
-}
-
-.copy-btn.success {
-  background: #16a34a;
-}
-
-/* FOOTER */
-.footer {
-  text-align: center;
-  font-size: 12px;
-  color: #6b7280;
-  margin-top: 18px;
-}
-</style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HEXGATE - Connexion WhatsApp Multi-Sessions</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+        .container {
+            background: white;
+            border-radius: 20px;
+            padding: 40px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            max-width: 600px;
+            width: 100%;
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+            text-align: center;
+            font-size: 28px;
+        }
+        .subtitle {
+            text-align: center;
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 14px;
+        }
+        .status-box {
+            background: #f5f5f5;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 30px;
+        }
+        .status-title {
+            font-weight: bold;
+            color: #555;
+            margin-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .status-refresh {
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            padding: 5px 10px;
+            font-size: 12px;
+            cursor: pointer;
+        }
+        .status-item {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+            color: #666;
+        }
+        .status-value {
+            font-weight: bold;
+            color: #333;
+        }
+        .active { color: #4CAF50; }
+        .pending { color: #FF9800; }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #555;
+            font-weight: 500;
+        }
+        input {
+            width: 100%;
+            padding: 15px;
+            border: 2px solid #ddd;
+            border-radius: 10px;
+            font-size: 16px;
+            transition: border-color 0.3s;
+        }
+        input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        button {
+            width: 100%;
+            padding: 15px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        button:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(102,126,234,0.4);
+        }
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+        .result-box {
+            margin-top: 20px;
+            padding: 20px;
+            border-radius: 10px;
+            display: none;
+        }
+        .result-box.success {
+            background: #e8f5e8;
+            border-left: 4px solid #4CAF50;
+            display: block;
+        }
+        .result-box.error {
+            background: #ffebee;
+            border-left: 4px solid #f44336;
+            display: block;
+        }
+        .code {
+            font-size: 32px;
+            font-weight: bold;
+            text-align: center;
+            letter-spacing: 5px;
+            color: #333;
+            margin: 15px 0;
+            font-family: monospace;
+        }
+        .info {
+            text-align: center;
+            color: #666;
+            font-size: 14px;
+            margin-top: 20px;
+        }
+        .expiry {
+            text-align: center;
+            color: #FF9800;
+            font-size: 14px;
+            margin-top: 10px;
+        }
+        .sessions-list {
+            margin-top: 30px;
+        }
+        .sessions-list h3 {
+            margin-bottom: 15px;
+            color: #333;
+        }
+        .session-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px;
+            background: #f9f9f9;
+            border-radius: 5px;
+            margin-bottom: 8px;
+        }
+        .session-item.active {
+            border-left: 3px solid #4CAF50;
+        }
+        .session-item.pending {
+            border-left: 3px solid #FF9800;
+        }
+        .session-info {
+            display: flex;
+            flex-direction: column;
+        }
+        .session-id {
+            font-weight: bold;
+            color: #333;
+        }
+        .session-phone {
+            font-size: 12px;
+            color: #666;
+        }
+        .session-status {
+            font-size: 12px;
+            font-weight: bold;
+        }
+        .session-status.active {
+            color: #4CAF50;
+        }
+        .session-status.pending {
+            color: #FF9800;
+        }
+        .session-code {
+            background: #333;
+            color: #fff;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 14px;
+        }
+        .progress-bar {
+            width: 100%;
+            height: 4px;
+            background: #ddd;
+            border-radius: 2px;
+            margin-top: 10px;
+            overflow: hidden;
+        }
+        .progress-fill {
+            height: 100%;
+            background: #4CAF50;
+            width: 0%;
+            transition: width 1s linear;
+        }
+        .steps {
+            background: #f0f0f0;
+            border-radius: 10px;
+            padding: 15px;
+            margin-top: 20px;
+        }
+        .steps ol {
+            margin-left: 20px;
+            color: #555;
+        }
+        .steps li {
+            margin-bottom: 5px;
+        }
+    </style>
 </head>
-
 <body>
+    <div class="container">
+        <h1>🔌 HEXGATE WhatsApp</h1>
+        <p class="subtitle">Connectez votre bot en 30 secondes - 4 sessions maximum</p>
+        
+        <div class="status-box">
+            <div class="status-title">
+                <span>📊 État des sessions</span>
+                <button class="status-refresh" onclick="updateStatus()" id="refreshBtn">↻ Rafraîchir</button>
+            </div>
+            <div class="status-item">
+                <span>Total disponibles:</span>
+                <span class="status-value" id="totalSessions">4</span>
+            </div>
+            <div class="status-item">
+                <span>Actives:</span>
+                <span class="status-value active" id="activeSessions">0</span>
+            </div>
+            <div class="status-item">
+                <span>En attente:</span>
+                <span class="status-value pending" id="pendingSessions">0</span>
+            </div>
+            <div class="status-item">
+                <span>Restantes:</span>
+                <span class="status-value" id="availableSessions">4</span>
+            </div>
+        </div>
+        
+        <div class="form-group">
+            <label for="phone">📱 Votre numéro WhatsApp (indicatif 243)</label>
+            <input type="tel" id="phone" placeholder="243XXXXXXXXX" value="224660070513">
+            <small style="color: #999; display: block; margin-top: 5px;">Format: 243 + 9 chiffres (ex: 243812345678)</small>
+        </div>
+        
+        <button id="generateBtn" onclick="generateCode()">Générer le Code</button>
+        
+        <div id="result" class="result-box">
+            <div id="resultMessage"></div>
+            <div id="codeDisplay" class="code"></div>
+            <div id="expiryInfo" class="expiry"></div>
+            <div id="sessionInfo" style="text-align: center; margin-top: 10px; color: #666;"></div>
+            <div class="progress-bar">
+                <div id="progressFill" class="progress-fill"></div>
+            </div>
+        </div>
+        
+        <div class="steps">
+            <strong>📲 Comment connecter votre session :</strong>
+            <ol>
+                <li>Entrez votre numéro avec l'indicatif 243</li>
+                <li>Cliquez sur "Générer le Code"</li>
+                <li>Copiez le code à 8 chiffres affiché</li>
+                <li>Ouvrez WhatsApp sur votre téléphone</li>
+                <li>Menu (3 points) → Appareils liés → Lier un appareil</li>
+                <li>Collez le code et validez</li>
+                <li>Votre bot est maintenant en ligne !</li>
+            </ol>
+        </div>
+        
+        <div id="sessionsList" class="sessions-list">
+            <h3>📱 Sessions en cours</h3>
+            <div id="sessionsContainer"></div>
+        </div>
+        
+        <div class="info">
+            ⚡ Sessions limitées à 4 • Codes valables 5 minutes • Bot développé par HEX-TECH
+        </div>
+    </div>
+    
+    <script>
+        let countdownInterval;
+        let progressInterval;
 
-<div class="card">
-  <h2>MOMO-ZEN Pairing</h2>
-  <p>Enter your WhatsApp number in international format</p>
-
-  <div class="input-box">
-    <i class="fa-solid fa-phone"></i>
-    <input type="number" id="number" placeholder="+243xxxxxxxxx">
-  </div>
-
-  <button id="submit">
-    <i class="fa-solid fa-link"></i> Generate Pairing Code
-  </button>
-
-  <main id="pair"></main>
-
-  <div class="footer">© MOMO-ZEN</div>
-</div>
-
-<script src="https://cdnjs.cloudflare.com/ajax/libs/axios/1.0.0-alpha.1/axios.min.js"></script>
-
-<script>
-let a = document.getElementById("pair");
-let b = document.getElementById("submit");
-let c = document.getElementById("number");
-
-async function Copy() {
-  let codeEl = document.getElementById("copy");
-  let btn = document.querySelector(".copy-btn");
-
-  await navigator.clipboard.writeText(codeEl.dataset.code);
-
-  btn.classList.add("success");
-  btn.innerHTML = '<i class="fa-solid fa-check"></i> Copied';
-
-  setTimeout(() => {
-    btn.classList.remove("success");
-    btn.innerHTML = '<i class="fa-solid fa-copy"></i> Copy Code';
-  }, 1200);
-}
-
-b.addEventListener("click", async (e) => {
-  e.preventDefault();
-
-  if (!c.value || c.value.replace(/[^0-9]/g, "").length < 11) {
-    a.innerHTML = '<p style="color:#f87171">Invalid number format</p>';
-    return;
-  }
-
-  const bc = c.value.replace(/[^0-9]/g, "");
-  a.innerHTML = '<div class="loader"></div>';
-
-  try {
-    let { data } = await axios(`/code?number=${bc}`);
-    let code = data.code || "Unavailable";
-
-    a.innerHTML = `
-      <div id="copy" data-code="${code}"
-           style="color:#ef4444;font-weight:700;font-size:18px">
-        CODE: ${code}
-      </div>
-
-      <button class="copy-btn" onclick="Copy()">
-        <i class="fa-solid fa-copy"></i> Copy Code
-      </button>
-    `;
-  } catch {
-    a.innerHTML = '<p style="color:#f87171">Service error</p>';
-  }
-});
-</script>
-
+        async function updateStatus() {
+            try {
+                const response = await fetch('/api/status');
+                const data = await response.json();
+                
+                if (data.success) {
+                    document.getElementById('activeSessions').textContent = data.activeSessions.length;
+                    document.getElementById('pendingSessions').textContent = data.pendingSessions.length;
+                    document.getElementById('availableSessions').textContent = data.available;
+                    
+                    // Afficher la liste des sessions
+                    const sessionsContainer = document.getElementById('sessionsContainer');
+                    
+                    if (data.activeSessions.length === 0 && data.pendingSessions.length === 0) {
+                        sessionsContainer.innerHTML = '<p style="color: #999; text-align: center; padding: 20px;">Aucune session active</p>';
+                        return;
+                    }
+                    
+                    let html = '';
+                    
+                    // Sessions actives
+                    data.activeSessions.forEach(session => {
+                        const date = new Date(session.connectedAt).toLocaleString();
+                        html += `
+                            <div class="session-item active">
+                                <div class="session-info">
+                                    <span class="session-id">${session.id}</span>
+                                    <span class="session-phone">📱 ${session.phone}</span>
+                                    <span class="session-phone">🕐 ${date}</span>
+                                </div>
+                                <div>
+                                    <span class="session-status active">● Connecté</span>
+                                </div>
+                            </div>
+                        `;
+                    });
+                    
+                    // Sessions en attente
+                    data.pendingSessions.forEach(session => {
+                        const expiresIn = Math.floor((session.generatedAt + 300000 - Date.now()) / 1000);
+                        html += `
+                            <div class="session-item pending">
+                                <div class="session-info">
+                                    <span class="session-id">${session.sessionId}</span>
+                                    <span class="session-phone">📱 ${session.phone}</span>
+                                    <span class="session-code">Code: ${session.code}</span>
+                                </div>
+                                <div>
+                                    <span class="session-status pending">⏳ ${expiresIn}s</span>
+                                </div>
+                            </div>
+                        `;
+                    });
+                    
+                    sessionsContainer.innerHTML = html;
+                }
+            } catch (error) {
+                console.error('Erreur mise à jour statut:', error);
+            }
+        }
+        
+        async function generateCode() {
+            const phone = document.getElementById('phone').value.trim();
+            const btn = document.getElementById('generateBtn');
+            const result = document.getElementById('result');
+            
+            // Arrêter les anciens compteurs
+            if (countdownInterval) clearInterval(countdownInterval);
+            if (progressInterval) clearInterval(progressInterval);
+            
+            // Validation du numéro
+            if (!phone.match(/^243\d{9}$/)) {
+                alert('❌ Format invalide! Utilisez: 243 suivi de 9 chiffres (ex: 243812345678)');
+                return;
+            }
+            
+            btn.disabled = true;
+            btn.textContent = 'Génération en cours...';
+            
+            try {
+                const response = await fetch('/api/generate-code', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ phone })
+                });
+                
+                const data = await response.json();
+                
+                result.className = 'result-box ' + (data.success ? 'success' : 'error');
+                
+                if (data.success) {
+                    document.getElementById('resultMessage').innerHTML = '✅ Code généré avec succès!';
+                    document.getElementById('codeDisplay').textContent = data.code;
+                    document.getElementById('expiryInfo').innerHTML = `⏱️ Expire dans ${data.expiresIn} secondes`;
+                    document.getElementById('sessionInfo').innerHTML = `📌 Session: ${data.sessionId}`;
+                    
+                    // Initialiser la barre de progression
+                    const progressFill = document.getElementById('progressFill');
+                    progressFill.style.width = '100%';
+                    
+                    // Démarrer le compte à rebours
+                    let timeLeft = data.expiresIn;
+                    const startTime = Date.now();
+                    
+                    countdownInterval = setInterval(() => {
+                        timeLeft--;
+                        document.getElementById('expiryInfo').innerHTML = `⏱️ Expire dans ${timeLeft} secondes`;
+                        
+                        // Mettre à jour la barre de progression
+                        const elapsed = (Date.now() - startTime) / 1000;
+                        const percent = Math.max(0, 100 - (elapsed / data.expiresIn * 100));
+                        progressFill.style.width = percent + '%';
+                        
+                        if (timeLeft <= 0) {
+                            clearInterval(countdownInterval);
+                            clearInterval(progressInterval);
+                            document.getElementById('expiryInfo').innerHTML = '⏰ Code expiré';
+                            document.getElementById('codeDisplay').textContent = '';
+                            result.className = 'result-box error';
+                            document.getElementById('resultMessage').innerHTML = '❌ Code expiré - Générez un nouveau code';
+                        }
+                    }, 1000);
+                    
+                } else {
+                    document.getElementById('resultMessage').innerHTML = '❌ ' + data.error;
+                    document.getElementById('codeDisplay').textContent = '';
+                    document.getElementById('expiryInfo').innerHTML = '';
+                    document.getElementById('sessionInfo').innerHTML = '';
+                    
+                    if (data.activeSessions) {
+                        document.getElementById('resultMessage').innerHTML += `<br>📊 Sessions actives: ${data.activeSessions.length}/4`;
+                    }
+                }
+                
+                result.style.display = 'block';
+                updateStatus();
+                
+            } catch (error) {
+                result.className = 'result-box error';
+                document.getElementById('resultMessage').innerHTML = '❌ Erreur: ' + error.message;
+                document.getElementById('codeDisplay').textContent = '';
+                document.getElementById('expiryInfo').innerHTML = '';
+                document.getElementById('sessionInfo').innerHTML = '';
+                result.style.display = 'block';
+            }
+            
+            btn.disabled = false;
+            btn.textContent = 'Générer le Code';
+        }
+        
+        // Mettre à jour le statut toutes les 3 secondes
+        setInterval(updateStatus, 3000);
+        
+        // Mettre à jour au chargement
+        window.onload = () => {
+            updateStatus();
+            
+            // Animation du bouton refresh
+            document.getElementById('refreshBtn').addEventListener('click', function() {
+                this.style.transform = 'rotate(180deg)';
+                setTimeout(() => {
+                    this.style.transform = 'rotate(0deg)';
+                }, 300);
+            });
+        };
+    </script>
 </body>
 </html>
