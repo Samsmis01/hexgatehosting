@@ -227,6 +227,15 @@
         .steps li {
             margin-bottom: 5px;
         }
+        .country-badge {
+            display: inline-block;
+            background: #667eea;
+            color: white;
+            padding: 3px 8px;
+            border-radius: 12px;
+            font-size: 11px;
+            margin-left: 5px;
+        }
     </style>
 </head>
 <body>
@@ -258,9 +267,11 @@
         </div>
         
         <div class="form-group">
-            <label for="phone">📱 Votre numéro WhatsApp (indicatif 243)</label>
-            <input type="tel" id="phone" placeholder="243XXXXXXXXX" value="224660070513">
-            <small style="color: #999; display: block; margin-top: 5px;">Format: 243 + 9 chiffres (ex: 243812345678)</small>
+            <label for="phone">📱 Votre numéro WhatsApp (avec indicatif)</label>
+            <input type="tel" id="phone" placeholder="224660070513" value="224660070513">
+            <small style="color: #999; display: block; margin-top: 5px;">
+                ✅ Supporte tous les indicatifs : 224 (Guinée), 237 (Cameroun), 243 (RDC), etc.
+            </small>
         </div>
         
         <button id="generateBtn" onclick="generateCode()">Générer le Code</button>
@@ -278,7 +289,7 @@
         <div class="steps">
             <strong>📲 Comment connecter votre session :</strong>
             <ol>
-                <li>Entrez votre numéro avec l'indicatif 243</li>
+                <li>Entrez votre numéro avec l'indicatif (224, 237, 243...)</li>
                 <li>Cliquez sur "Générer le Code"</li>
                 <li>Copiez le code à 8 chiffres affiché</li>
                 <li>Ouvrez WhatsApp sur votre téléphone</li>
@@ -294,7 +305,7 @@
         </div>
         
         <div class="info">
-            ⚡ Sessions limitées à 4 • Codes valables 5 minutes • Bot développé par HEX-TECH
+            ⚡ Sessions limitées à 4 • Codes valables 5 minutes • Support de tous les indicatifs
         </div>
     </div>
     
@@ -312,7 +323,6 @@
                     document.getElementById('pendingSessions').textContent = data.pendingSessions.length;
                     document.getElementById('availableSessions').textContent = data.available;
                     
-                    // Afficher la liste des sessions
                     const sessionsContainer = document.getElementById('sessionsContainer');
                     
                     if (data.activeSessions.length === 0 && data.pendingSessions.length === 0) {
@@ -322,13 +332,13 @@
                     
                     let html = '';
                     
-                    // Sessions actives
                     data.activeSessions.forEach(session => {
                         const date = new Date(session.connectedAt).toLocaleString();
+                        const indicatif = session.phone.substring(0, 3);
                         html += `
                             <div class="session-item active">
                                 <div class="session-info">
-                                    <span class="session-id">${session.id}</span>
+                                    <span class="session-id">${session.id} <span class="country-badge">+${indicatif}</span></span>
                                     <span class="session-phone">📱 ${session.phone}</span>
                                     <span class="session-phone">🕐 ${date}</span>
                                 </div>
@@ -339,13 +349,13 @@
                         `;
                     });
                     
-                    // Sessions en attente
                     data.pendingSessions.forEach(session => {
                         const expiresIn = Math.floor((session.generatedAt + 300000 - Date.now()) / 1000);
+                        const indicatif = session.phone.substring(0, 3);
                         html += `
                             <div class="session-item pending">
                                 <div class="session-info">
-                                    <span class="session-id">${session.sessionId}</span>
+                                    <span class="session-id">${session.sessionId} <span class="country-badge">+${indicatif}</span></span>
                                     <span class="session-phone">📱 ${session.phone}</span>
                                     <span class="session-code">Code: ${session.code}</span>
                                 </div>
@@ -368,13 +378,13 @@
             const btn = document.getElementById('generateBtn');
             const result = document.getElementById('result');
             
-            // Arrêter les anciens compteurs
             if (countdownInterval) clearInterval(countdownInterval);
             if (progressInterval) clearInterval(progressInterval);
             
-            // Validation du numéro
-            if (!phone.match(/^243\d{9}$/)) {
-                alert('❌ Format invalide! Utilisez: 243 suivi de 9 chiffres (ex: 243812345678)');
+            // Validation simple : au moins 10 chiffres
+            const cleanPhone = phone.replace(/\D/g, '');
+            if (cleanPhone.length < 10 || cleanPhone.length > 15) {
+                alert('❌ Format invalide! Le numéro doit contenir 10-15 chiffres (indicatif inclus)');
                 return;
             }
             
@@ -385,7 +395,7 @@
                 const response = await fetch('/api/generate-code', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ phone })
+                    body: JSON.stringify({ phone: cleanPhone })
                 });
                 
                 const data = await response.json();
@@ -396,13 +406,11 @@
                     document.getElementById('resultMessage').innerHTML = '✅ Code généré avec succès!';
                     document.getElementById('codeDisplay').textContent = data.code;
                     document.getElementById('expiryInfo').innerHTML = `⏱️ Expire dans ${data.expiresIn} secondes`;
-                    document.getElementById('sessionInfo').innerHTML = `📌 Session: ${data.sessionId}`;
+                    document.getElementById('sessionInfo').innerHTML = `📌 Session: ${data.sessionId} | Indicatif: +${cleanPhone.substring(0,3)}`;
                     
-                    // Initialiser la barre de progression
                     const progressFill = document.getElementById('progressFill');
                     progressFill.style.width = '100%';
                     
-                    // Démarrer le compte à rebours
                     let timeLeft = data.expiresIn;
                     const startTime = Date.now();
                     
@@ -410,7 +418,6 @@
                         timeLeft--;
                         document.getElementById('expiryInfo').innerHTML = `⏱️ Expire dans ${timeLeft} secondes`;
                         
-                        // Mettre à jour la barre de progression
                         const elapsed = (Date.now() - startTime) / 1000;
                         const percent = Math.max(0, 100 - (elapsed / data.expiresIn * 100));
                         progressFill.style.width = percent + '%';
@@ -452,14 +459,10 @@
             btn.textContent = 'Générer le Code';
         }
         
-        // Mettre à jour le statut toutes les 3 secondes
         setInterval(updateStatus, 3000);
         
-        // Mettre à jour au chargement
         window.onload = () => {
             updateStatus();
-            
-            // Animation du bouton refresh
             document.getElementById('refreshBtn').addEventListener('click', function() {
                 this.style.transform = 'rotate(180deg)';
                 setTimeout(() => {
