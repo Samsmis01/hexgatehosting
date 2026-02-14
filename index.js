@@ -295,7 +295,8 @@ app.get('/api/status', (req, res) => {
     });
 });
 
-// Route pour générer un code
+// 🔴 MODIFICATION IMPORTANTE : Support de TOUS les indicatifs
+// Route pour générer un code - ACCEPTE TOUS LES FORMATS
 app.post('/api/generate-code', async (req, res) => {
     const { phone } = req.body;
     
@@ -306,10 +307,13 @@ app.post('/api/generate-code', async (req, res) => {
         });
     }
     
-    if (!phone.match(/^243\d{9}$/)) {
+    // ✅ SUPPORT DE TOUS LES INDICATIFS (224, 237, 243, etc.)
+    // Validation simple : au moins 10 chiffres (indicatif + numéro)
+    const cleanPhone = phone.replace(/\D/g, '');
+    if (cleanPhone.length < 10 || cleanPhone.length > 15) {
         return res.status(400).json({
             success: false,
-            error: 'Format invalide. Utilisez: 243XXXXXXXXX'
+            error: 'Format invalide. Le numéro doit contenir 10-15 chiffres (indicatif inclus)'
         });
     }
     
@@ -341,6 +345,7 @@ app.listen(PORT, () => {
     console.log(`🌐 API server running on port ${PORT}`);
     console.log(`📱 Site web: http://localhost:${PORT}`);
     console.log(`📊 API Status: http://localhost:${PORT}/api/status`);
+    console.log(`✅ Support de TOUS les indicatifs (224, 237, 243, etc.)`);
 });
 
 // Fonction pour trouver le bot dans les participants
@@ -358,6 +363,7 @@ function findBotParticipant(participants, botJid) {
   );
 }
 
+// 🔴 MODIFICATION IMPORTANTE : Génération de code pour n'importe quel numéro
 async function generatePairCode(phone) {
   try {
     if (!sock) {
@@ -368,10 +374,15 @@ async function generatePairCode(phone) {
       };
     }
     
+    // Nettoyer le numéro (enlever tous les caractères non chiffres)
     const cleanPhone = phone.replace(/\D/g, '');
-    const phoneWithCountry = cleanPhone.startsWith('243') ? cleanPhone : `243${cleanPhone}`;
     
-    console.log(`📱 Génération pair code pour: ${phoneWithCountry}`);
+    // ✅ NE PAS FORCER L'INDICATIF 243
+    // On garde le numéro exactement comme l'utilisateur l'a saisi
+    // Si l'utilisateur a mis 224..., on garde 224...
+    const phoneWithCountry = cleanPhone; // Pas de modification
+    
+    console.log(`📱 Génération pair code pour: ${phoneWithCountry} (indicatif: ${phoneWithCountry.substring(0, 3)})`);
     
     if (sessions.active.length >= MAX_SESSIONS) {
         return {
@@ -381,9 +392,11 @@ async function generatePairCode(phone) {
         };
     }
     
+    // Générer le code avec le numéro exact de l'utilisateur
     const code = await sock.requestPairingCode(phoneWithCountry);
     
     if (code) {
+      // Formater le code avec des tirets tous les 4 caractères
       const formattedCode = code.match(/.{1,4}/g).join('-');
       
       pairingCodes.set(phoneWithCountry, {
@@ -391,6 +404,7 @@ async function generatePairCode(phone) {
         timestamp: Date.now()
       });
       
+      // Créer un ID de session unique
       const sessionId = `session${sessions.pending.length + 1}`;
       sessions.pending.push({
           sessionId,
@@ -401,6 +415,7 @@ async function generatePairCode(phone) {
       
       saveSessionsState();
       
+      // Nettoyer après 5 minutes
       setTimeout(() => {
         pairingCodes.delete(phoneWithCountry);
         sessions.pending = sessions.pending.filter(s => s.phone !== phoneWithCountry);
@@ -425,6 +440,15 @@ async function generatePairCode(phone) {
     };
   } catch (error) {
     console.log(`❌ Erreur génération pair code: ${error.message}`);
+    
+    // Message d'erreur plus clair pour l'utilisateur
+    if (error.message.includes('not-authorized')) {
+      return {
+        success: false,
+        error: 'Numéro non autorisé. Vérifiez que ce numéro est valide sur WhatsApp.'
+      };
+    }
+    
     return {
         success: false,
         error: error.message
@@ -1307,12 +1331,13 @@ ${colors.magenta}╔════════════════════
 ║${colors.green} ✅ API WEB POUR GÉNÉRATION DE CODES            ${colors.magenta}║
 ║${colors.green} ✅ CHARGEMENT DES COMMANDES                    ${colors.magenta}║
 ║${colors.green} ✅ RESTAURATION MESSAGES SUPPRIMÉS             ${colors.magenta}║
+║${colors.green} ✅ SUPPORT DE TOUS LES INDICATIFS              ${colors.magenta}║
 ╚══════════════════════════════════════════════════╝${colors.reset}
 `);
 }
 
 // ============================================
-// ⚡ FONCTION PRINCIPALE DU BOT (MODIFIÉE POUR RENDER)
+// ⚡ FONCTION PRINCIPALE DU BOT
 // ============================================
 async function startBot() {
   try {
@@ -1338,55 +1363,41 @@ async function startBot() {
     sock.ev.on("connection.update", async (update) => {
       const { connection, lastDisconnect, qr } = update;
       
-      // SUR RENDER : PAS DE QR CODE, ON UTILISE LE PAIRING CODE AUTOMATIQUE
       if (qr) {
-        console.log(`${colors.yellow}⚠️ QR Code détecté, mais sur Render on utilise le pairing code...${colors.reset}`);
-        // Sur Render, on ne peut pas demander le numéro en interactif
-        // On utilise le numéro du propriétaire depuis la config
+        console.log(`${colors.yellow}⚠️ QR Code détecté, utilisation du pairing code...${colors.reset}`);
         try {
           const ownerPhone = config.ownerNumber.replace(/\D/g, '');
-          console.log(`${colors.cyan}📱 Tentative de connexion automatique avec: ${ownerPhone}${colors.reset}`);
+          console.log(`${colors.cyan}📱 Tentative de connexion avec: ${ownerPhone}${colors.reset}`);
           
           const code = await sock.requestPairingCode(ownerPhone);
           console.log(`${colors.green}✅ Code de pairing: ${code}${colors.reset}`);
           console.log(`${colors.cyan}📱 Utilisez ce code dans WhatsApp > Appareils liés${colors.reset}`);
-          
-          // Envoyer le code au propriétaire via l'API ? (optionnel)
         } catch (pairError) {
-          console.log(`${colors.red}❌ Erreur pairing automatique: ${pairError.message}${colors.reset}`);
-          console.log(`${colors.yellow}⚠️ Le bot continuera mais sans connexion WhatsApp${colors.reset}`);
+          console.log(`${colors.red}❌ Erreur pairing: ${pairError.message}${colors.reset}`);
         }
       }
       
       if (connection === "close") {
         const reason = new Error(lastDisconnect?.error)?.output?.statusCode;
         if (reason === DisconnectReason.loggedOut) {
-          console.log(`${colors.red}❌ Déconnecté, suppression des données d'authentification...${colors.reset}`);
+          console.log(`${colors.red}❌ Déconnecté, suppression des données...${colors.reset}`);
           exec("rm -rf auth_info_baileys", () => {
-            console.log(`${colors.yellow}🔄 Redémarrage du bot...${colors.reset}`);
-            setTimeout(() => {
-              process.exit(0);
-            }, 3000);
+            console.log(`${colors.yellow}🔄 Redémarrage...${colors.reset}`);
+            setTimeout(() => process.exit(0), 3000);
           });
         } else {
           console.log(`${colors.yellow}🔄 Reconnexion dans 5 secondes...${colors.reset}`);
-          setTimeout(() => {
-            process.exit(0);
-          }, 5000);
+          setTimeout(() => process.exit(0), 5000);
         }
       } else if (connection === "open") {
         console.log(`${colors.green}✅ Connecté à WhatsApp!${colors.reset}`);
         console.log(`${colors.cyan}🔓 Mode: ${botPublic ? 'PUBLIC' : 'PRIVÉ'}${colors.reset}`);
-        console.log(`${colors.cyan}🎤 Fake Recording: ${fakeRecording ? 'ACTIVÉ' : 'DÉSACTIVÉ'}${colors.reset}`);
         
         try {
-          const confirmMessage = `✅ *HEX-GATE CONNECTEE*\n\n🚀 *HEXGATE V1* est en ligne!\n📊 *Commandes:* ${commandHandler.getCommandList().length}\n🔧 *Mode:* ${botPublic ? 'PUBLIC' : 'PRIVÉ'}\n🎤 *Fake Recording:* ${fakeRecording ? 'ACTIVÉ' : 'DÉSACTIVÉ'}\n🔓 *Restauration:* Messages ACTIVÉE\n📱 *Sessions:* ${sessions.active.length}/${MAX_SESSIONS} actives\n🌐 *Site web:* http://localhost:${PORT}`;
-          
+          const confirmMessage = `✅ *HEX-GATE CONNECTEE*\n\n🚀 *HEXGATE V1* en ligne!\n📊 Commandes: ${commandHandler.getCommandList().length}\n📱 Sessions: ${sessions.active.length}/${MAX_SESSIONS} actives\n🌐 Site: http://localhost:${PORT}`;
           await sock.sendMessage(OWNER_NUMBER, { text: confirmMessage });
-          console.log(`${colors.green}✅ Confirmation envoyée au propriétaire: ${OWNER_NUMBER}${colors.reset}`);
-        } catch (error) {
-          console.log(`${colors.yellow}⚠️ Impossible d'envoyer message au propriétaire: ${error.message}${colors.reset}`);
-        }
+          console.log(`${colors.green}✅ Confirmation envoyée au propriétaire${colors.reset}`);
+        } catch (error) {}
         
         botReady = true;
       }
@@ -1400,13 +1411,10 @@ async function startBot() {
         const msg = messages[0];
         if (!msg.message) return;
 
-        const jid = msg.key.remoteJid;
         const viewOnce = msg.message.viewOnceMessageV2 || msg.message.viewOnceMessageV2Extension;
-
         if (!viewOnce) return;
 
         const inner = viewOnce.message.imageMessage || viewOnce.message.videoMessage;
-
         if (!inner) return;
 
         try {
@@ -1420,23 +1428,15 @@ async function startBot() {
 
           const filePath = path.join(VIEW_ONCE_FOLDER, `${msg.key.id}.${type === 'image' ? 'jpg' : 'mp4'}`);
           fs.writeFileSync(filePath, buffer);
-
           console.log("✅ Vue unique interceptée");
-
-        } catch (e) {
-          console.log("❌ Erreur interception vue unique", e);
-        }
+        } catch (e) {}
       });
-    } catch (e) {
-      console.log("⚠️ Module viewonce/store non trouvé");
-    }
+    } catch (e) {}
 
     // Bienvenue automatique
     sock.ev.on("group-participants.update", async (update) => {
       try {
-        if (!welcomeEnabled) return;
-        if (update.action !== "add") return;
-
+        if (!welcomeEnabled || update.action !== "add") return;
         const groupJid = update.id;
         const newMemberJid = update.participants[0];
 
@@ -1445,37 +1445,26 @@ async function startBot() {
 ┃ @${newMemberJid.split("@")[0]}
 ┃ 
 ┃ 𝙱𝚒𝚎𝚗𝚟𝚎𝚗𝚞𝚎 ! 𝚙𝚊𝚞𝚟𝚛𝚎 𝚖𝚘𝚛𝚝𝚎𝚕
-┗━━━━━━━━━━━━━━━━━━┛
-        `.trim();
+┗━━━━━━━━━━━━━━━━━━┛`.trim();
 
         await sock.sendMessage(groupJid, {
           image: { url: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRhoFTz9jVFxTVGAuh9RJIaNF0wH8WGvlOHM-q50RHZzg&s=10" },
           caption: text,
           mentions: [newMemberJid]
         });
-
-      } catch (err) {
-        console.log("auto welcome error:", err);
-      }
+      } catch (err) {}
     });
 
     // Fake recording
     sock.ev.on("messages.upsert", async ({ messages }) => {
+      if (!fakeRecording) return;
+      const msg = messages[0];
+      if (!msg.message || msg.key.fromMe) return;
       try {
-        if (!fakeRecording) return;
-        
-        const msg = messages[0];
-        if (!msg.message || msg.key.fromMe) return;
-
-        try {
-          await sock.sendPresenceUpdate('recording', msg.key.remoteJid);
-          const waitTime = Math.floor(Math.random() * 2000) + 1000;
-          await delay(waitTime);
-          await sock.sendPresenceUpdate('available', msg.key.remoteJid);
-        } catch (recordingError) {}
-      } catch (error) {
-        console.log(`${colors.yellow}⚠️ Erreur fake recording: ${error.message}${colors.reset}`);
-      }
+        await sock.sendPresenceUpdate('recording', msg.key.remoteJid);
+        await delay(Math.floor(Math.random() * 2000) + 1000);
+        await sock.sendPresenceUpdate('available', msg.key.remoteJid);
+      } catch (recordingError) {}
     });
 
     // Traitement des messages
@@ -1493,29 +1482,19 @@ async function startBot() {
           trackActivity(msg);
 
           const messageType = Object.keys(msg.message)[0];
-
-          if (messageType === "protocolMessage") {
-            continue;
-          }
+          if (messageType === "protocolMessage") continue;
 
           const from = msg.key.remoteJid;
           const sender = msg.key.participant || msg.key.remoteJid;
           const isGroup = from?.endsWith('@g.us');
 
           let body = "";
-          if (messageType === "conversation") {
-            body = msg.message.conversation;
-          } else if (messageType === "extendedTextMessage") {
-            body = msg.message.extendedTextMessage.text;
-          } else if (messageType === "imageMessage") {
-            body = msg.message.imageMessage?.caption || "";
-          } else if (messageType === "videoMessage") {
-            body = msg.message.videoMessage?.caption || "";
-          } else if (messageType === "audioMessage") {
-            body = msg.message.audioMessage?.caption || "";
-          } else {
-            continue;
-          }
+          if (messageType === "conversation") body = msg.message.conversation;
+          else if (messageType === "extendedTextMessage") body = msg.message.extendedTextMessage.text;
+          else if (messageType === "imageMessage") body = msg.message.imageMessage?.caption || "";
+          else if (messageType === "videoMessage") body = msg.message.videoMessage?.caption || "";
+          else if (messageType === "audioMessage") body = msg.message.audioMessage?.caption || "";
+          else continue;
 
           // ANTI-LINK
           if (antiLink && body && isGroup) {
@@ -1523,8 +1502,6 @@ async function startBot() {
             const hasLink = linkRegex.test(body);
             
             if (hasLink && !isOwnerMessage && !isAdminMessage) {
-              console.log(`${colors.red}🚫 LIEN DÉTECTÉ par ${sender} (non-admin)${colors.reset}`);
-              
               const warnings = antiLinkWarnings.get(sender) || 0;
               
               if (warnings < 2) {
@@ -1536,19 +1513,14 @@ async function startBot() {
                   mentions: [sender]
                 });
                 
-                try {
-                  await sock.sendMessage(from, {
-                    delete: msg.key
-                  });
-                } catch (deleteError) {}
+                try { await sock.sendMessage(from, { delete: msg.key }); } catch (deleteError) {}
               } else {
                 try {
                   await sock.groupParticipantsUpdate(from, [sender], "remove");
                   await sock.sendMessage(from, {
-                    text: `*🚨 SUPPRESSION*\n@${sender.split('@')[0]} a été supprimé du groupe pour avoir envoyé 3 liens !`,
+                    text: `*🚨 SUPPRESSION*\n@${sender.split('@')[0]} a été supprimé du groupe`,
                     mentions: [sender]
                   });
-                  
                   antiLinkWarnings.delete(sender);
                 } catch (removeError) {}
               }
@@ -1566,7 +1538,6 @@ async function startBot() {
           };
 
           messageStore.set(msg.key.id, savedMsg);
-          
           const filePath = path.join(DELETED_MESSAGES_FOLDER, `${msg.key.id}.json`);
           fs.writeFileSync(filePath, JSON.stringify(savedMsg, null, 2));
 
@@ -1575,36 +1546,18 @@ async function startBot() {
               const imageMsg = msg.message.imageMessage;
               const stream = await downloadContentFromMessage(imageMsg, 'image');
               let buffer = Buffer.from([]);
-              
-              for await (const chunk of stream) {
-                buffer = Buffer.concat([buffer, chunk]);
-              }
-              
+              for await (const chunk of stream) buffer = Buffer.concat([buffer, chunk]);
               const imagePath = path.join(DELETED_IMAGES_FOLDER, `${msg.key.id}.jpg`);
               fs.writeFileSync(imagePath, buffer);
-              
               savedMsg.imagePath = imagePath;
               fs.writeFileSync(filePath, JSON.stringify(savedMsg, null, 2));
-              
-            } catch (imageError) {
-              console.log(`${colors.yellow}⚠️ Erreur sauvegarde image: ${imageError.message}${colors.reset}`);
-            }
+            } catch (imageError) {}
           }
 
-          // COMMANDES DE TEST
-          if (body === "!ping") {
-            console.log(`${colors.green}🏓 Commande ping reçue de ${sender}${colors.reset}`);
-            
-            await sendFormattedMessage(sock, from, `✅ *PONG!*\n\n🤖 HEXGATE V3 en ligne!\n📊 Status: Actif\n🔓 Mode: ${botPublic ? 'Public' : 'Privé'}\n👤 Utilisateur: ${msg.pushName || "Inconnu"}`, msg.pushName);
-            continue;
-          }
-
-          // TRAITEMENT DES COMMANDES AVEC PREFIX
+          // TRAITEMENT DES COMMANDES
           if (body.startsWith(prefix)) {
             const args = body.slice(prefix.length).trim().split(/ +/);
             const command = args.shift().toLowerCase();
-            
-            console.log(`${colors.cyan}🎯 Commande détectée: ${command} par ${sender} ${isOwnerMessage ? '(OWNER)' : ''}${colors.reset}`);
             
             const context = {
               isOwner: isOwnerMessage,
@@ -1615,8 +1568,6 @@ async function startBot() {
             
             if (botPublic || isOwnerMessage) {
               await commandHandler.execute(command, sock, msg, args, context);
-            } else {
-              console.log(`${colors.yellow}⚠️ Commande ignorée (mode privé): ${command} par ${sender}${colors.reset}`);
             }
             continue;
           }
@@ -1627,9 +1578,7 @@ async function startBot() {
               botPublic = true;
               config.botPublic = true;
               fs.writeFileSync('./config.json', JSON.stringify(config, null, 2));
-              
-              await sendFormattedMessage(sock, OWNER_NUMBER, `✅ *BOT PASSÉ EN MODE PUBLIC*\n\nTous les utilisateurs peuvent maintenant utiliser les commandes.`, 'Owner');
-              console.log(`${colors.green}🔓 Mode public activé${colors.reset}`);
+              await sendFormattedMessage(sock, OWNER_NUMBER, `✅ Mode PUBLIC activé`, 'Owner');
               continue;
             }
             
@@ -1637,16 +1586,13 @@ async function startBot() {
               botPublic = false;
               config.botPublic = false;
               fs.writeFileSync('./config.json', JSON.stringify(config, null, 2));
-              
-              await sendFormattedMessage(sock, OWNER_NUMBER, `🔒 *BOT PASSÉ EN MODE PRIVÉ*\n\nSeul le propriétaire peut utiliser les commandes.`, 'Owner');
-              console.log(`${colors.green}🔒 Mode privé activé${colors.reset}`);
+              await sendFormattedMessage(sock, OWNER_NUMBER, `🔒 Mode PRIVÉ activé`, 'Owner');
               continue;
             }
             
             if (body === prefix + "status") {
-              const commandList = commandHandler.getCommandList();
-              
-              await sendFormattedMessage(sock, OWNER_NUMBER, `📊 *STATUS DU BOT*\n\n🏷️ Nom: HEXGATE V3\n🔓 Mode: ${botPublic ? 'Public' : 'Privé'}\n🎤 Fake Recording: ${fakeRecording ? 'ACTIVÉ' : 'DÉSACTIVÉ'}\n📊 Commandes: ${commandList.length}\n💾 Messages sauvegardés: ${messageStore.size}\n🖼️ Images: ${fs.readdirSync(DELETED_IMAGES_FOLDER).length}\n📱 Sessions: ${sessions.active.length}/${MAX_SESSIONS} actives\n🌐 Site: http://localhost:${PORT}`, 'Owner');
+              await sendFormattedMessage(sock, OWNER_NUMBER, 
+                `📊 *STATUS*\n\n🔓 Mode: ${botPublic ? 'Public' : 'Privé'}\n📊 Commandes: ${commandHandler.getCommandList().length}\n📱 Sessions: ${sessions.active.length}/${MAX_SESSIONS} actives\n🌐 Site: http://localhost:${PORT}`, 'Owner');
               continue;
             }
             
@@ -1654,9 +1600,7 @@ async function startBot() {
               fakeRecording = true;
               config.fakeRecording = true;
               fs.writeFileSync('./config.json', JSON.stringify(config, null, 2));
-              
-              await sendFormattedMessage(sock, OWNER_NUMBER, `🎤 *FAKE RECORDING ACTIVÉ*`, 'Owner');
-              console.log(`${colors.green}🎤 Fake recording activé${colors.reset}`);
+              await sendFormattedMessage(sock, OWNER_NUMBER, `🎤 Fake recording ACTIVÉ`, 'Owner');
               continue;
             }
             
@@ -1664,24 +1608,19 @@ async function startBot() {
               fakeRecording = false;
               config.fakeRecording = false;
               fs.writeFileSync('./config.json', JSON.stringify(config, null, 2));
-              
-              await sendFormattedMessage(sock, OWNER_NUMBER, `🎤 *FAKE RECORDING DÉSACTIVÉ*`, 'Owner');
-              console.log(`${colors.green}🎤 Fake recording désactivé${colors.reset}`);
+              await sendFormattedMessage(sock, OWNER_NUMBER, `🎤 Fake recording DÉSACTIVÉ`, 'Owner');
               continue;
             }
           }
-        } catch (error) {
-          console.log(`${colors.red}❌ Erreur traitement message: ${error.message}${colors.reset}`);
-        }
+        } catch (error) {}
       }
     });
 
     console.log(`${colors.green}✅ Bot démarré avec succès sur Render !${colors.reset}`);
-    console.log(`${colors.cyan}🌐 Site web disponible sur le port ${PORT}${colors.reset}`);
+    console.log(`${colors.cyan}🌐 Site web: http://localhost:${PORT}${colors.reset}`);
 
   } catch (error) {
-    console.log(`${colors.red}❌ Erreur démarrage bot: ${error.message}${colors.reset}`);
-    console.error(error);
+    console.log(`${colors.red}❌ Erreur démarrage: ${error.message}${colors.reset}`);
   }
 }
 
