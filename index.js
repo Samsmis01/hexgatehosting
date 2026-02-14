@@ -295,8 +295,7 @@ app.get('/api/status', (req, res) => {
     });
 });
 
-// 🔴 MODIFICATION IMPORTANTE : Support de TOUS les indicatifs
-// Route pour générer un code - ACCEPTE TOUS LES FORMATS
+// 🔴 MODIFICATION : Génération de code pour l'utilisateur qui SAISIT son numéro
 app.post('/api/generate-code', async (req, res) => {
     const { phone } = req.body;
     
@@ -307,17 +306,20 @@ app.post('/api/generate-code', async (req, res) => {
         });
     }
     
-    // ✅ SUPPORT DE TOUS LES INDICATIFS (224, 237, 243, etc.)
-    // Validation simple : au moins 10 chiffres (indicatif + numéro)
+    // Nettoyer le numéro
     const cleanPhone = phone.replace(/\D/g, '');
+    
+    // Validation simple
     if (cleanPhone.length < 10 || cleanPhone.length > 15) {
         return res.status(400).json({
             success: false,
-            error: 'Format invalide. Le numéro doit contenir 10-15 chiffres (indicatif inclus)'
+            error: 'Format invalide. Le numéro doit contenir 10-15 chiffres'
         });
     }
     
-    const result = await generatePairCode(phone);
+    console.log(`🌐 Nouvelle demande de code pour: ${cleanPhone}`);
+    
+    const result = await generatePairCode(cleanPhone);
     res.json(result);
 });
 
@@ -345,7 +347,7 @@ app.listen(PORT, () => {
     console.log(`🌐 API server running on port ${PORT}`);
     console.log(`📱 Site web: http://localhost:${PORT}`);
     console.log(`📊 API Status: http://localhost:${PORT}/api/status`);
-    console.log(`✅ Support de TOUS les indicatifs (224, 237, 243, etc.)`);
+    console.log(`✅ En attente de numéros depuis le web...`);
 });
 
 // Fonction pour trouver le bot dans les participants
@@ -363,52 +365,44 @@ function findBotParticipant(participants, botJid) {
   );
 }
 
-// 🔴 MODIFICATION IMPORTANTE : Génération de code pour n'importe quel numéro
+// 🔴 FONCTION PRINCIPALE : Génère un code pour le numéro SAISI par l'utilisateur
 async function generatePairCode(phone) {
   try {
     if (!sock) {
-      console.log('❌ Bot non initialisé pour générer pair code');
+      console.log('❌ Bot non initialisé');
       return {
         success: false,
         error: 'Bot non initialisé'
       };
     }
     
-    // Nettoyer le numéro (enlever tous les caractères non chiffres)
-    const cleanPhone = phone.replace(/\D/g, '');
-    
-    // ✅ NE PAS FORCER L'INDICATIF 243
-    // On garde le numéro exactement comme l'utilisateur l'a saisi
-    // Si l'utilisateur a mis 224..., on garde 224...
-    const phoneWithCountry = cleanPhone; // Pas de modification
-    
-    console.log(`📱 Génération pair code pour: ${phoneWithCountry} (indicatif: ${phoneWithCountry.substring(0, 3)})`);
+    console.log(`👤 Génération pour l'utilisateur: ${phone}`);
     
     if (sessions.active.length >= MAX_SESSIONS) {
         return {
             success: false,
-            error: 'Limite de sessions atteinte (4 maximum)',
-            activeSessions: sessions.active
+            error: 'Limite de sessions atteinte (4 maximum)'
         };
     }
     
-    // Générer le code avec le numéro exact de l'utilisateur
-    const code = await sock.requestPairingCode(phoneWithCountry);
+    // ✅ Générer le code pour CE numéro précis
+    const code = await sock.requestPairingCode(phone);
     
     if (code) {
-      // Formater le code avec des tirets tous les 4 caractères
+      // Formater le code avec des tirets
       const formattedCode = code.match(/.{1,4}/g).join('-');
       
-      pairingCodes.set(phoneWithCountry, {
+      // Stocker le code
+      pairingCodes.set(phone, {
         code: formattedCode,
         timestamp: Date.now()
       });
       
-      // Créer un ID de session unique
+      // Créer une session en attente
       const sessionId = `session${sessions.pending.length + 1}`;
       sessions.pending.push({
           sessionId,
-          phone: phoneWithCountry,
+          phone,
           code: formattedCode,
           generatedAt: Date.now()
       });
@@ -417,20 +411,20 @@ async function generatePairCode(phone) {
       
       // Nettoyer après 5 minutes
       setTimeout(() => {
-        pairingCodes.delete(phoneWithCountry);
-        sessions.pending = sessions.pending.filter(s => s.phone !== phoneWithCountry);
+        pairingCodes.delete(phone);
+        sessions.pending = sessions.pending.filter(s => s.phone !== phone);
         saveSessionsState();
-        console.log(`⏰ Code expiré pour ${phoneWithCountry}`);
+        console.log(`⏰ Code expiré pour ${phone}`);
       }, 300000);
       
-      console.log(`✅ Pair code généré: ${formattedCode} pour ${phoneWithCountry}`);
+      console.log(`✅ Code généré: ${formattedCode} pour ${phone}`);
       
       return {
           success: true,
           sessionId,
           code: formattedCode,
           expiresIn: 300,
-          message: `Code: ${formattedCode}\nValable 5 minutes\nSession: ${sessionId}`
+          message: `Code pour ${phone}`
       };
     }
     
@@ -439,16 +433,7 @@ async function generatePairCode(phone) {
       error: 'Impossible de générer le code'
     };
   } catch (error) {
-    console.log(`❌ Erreur génération pair code: ${error.message}`);
-    
-    // Message d'erreur plus clair pour l'utilisateur
-    if (error.message.includes('not-authorized')) {
-      return {
-        success: false,
-        error: 'Numéro non autorisé. Vérifiez que ce numéro est valide sur WhatsApp.'
-      };
-    }
-    
+    console.log(`❌ Erreur: ${error.message}`);
     return {
         success: false,
         error: error.message
@@ -1330,8 +1315,7 @@ ${colors.magenta}╔════════════════════
 ║${colors.green} ✅ BOT AVEC GESTION 4 SESSIONS                  ${colors.magenta}║
 ║${colors.green} ✅ API WEB POUR GÉNÉRATION DE CODES            ${colors.magenta}║
 ║${colors.green} ✅ CHARGEMENT DES COMMANDES                    ${colors.magenta}║
-║${colors.green} ✅ RESTAURATION MESSAGES SUPPRIMÉS             ${colors.magenta}║
-║${colors.green} ✅ SUPPORT DE TOUS LES INDICATIFS              ${colors.magenta}║
+║${colors.green} ✅ EN ATTENTE DE NUMÉROS DEPUIS LE WEB         ${colors.magenta}║
 ╚══════════════════════════════════════════════════╝${colors.reset}
 `);
 }
@@ -1360,45 +1344,37 @@ async function startBot() {
 
     sock.ev.on("creds.update", saveCreds);
 
+    // 🔴 MODIFICATION : PLUS AUCUNE TENTATIVE AUTOMATIQUE
     sock.ev.on("connection.update", async (update) => {
       const { connection, lastDisconnect, qr } = update;
       
+      // Si QR code détecté - on attend que l'utilisateur le scanne
       if (qr) {
-        console.log(`${colors.yellow}⚠️ QR Code détecté, utilisation du pairing code...${colors.reset}`);
-        try {
-          const ownerPhone = config.ownerNumber.replace(/\D/g, '');
-          console.log(`${colors.cyan}📱 Tentative de connexion avec: ${ownerPhone}${colors.reset}`);
-          
-          const code = await sock.requestPairingCode(ownerPhone);
-          console.log(`${colors.green}✅ Code de pairing: ${code}${colors.reset}`);
-          console.log(`${colors.cyan}📱 Utilisez ce code dans WhatsApp > Appareils liés${colors.reset}`);
-        } catch (pairError) {
-          console.log(`${colors.red}❌ Erreur pairing: ${pairError.message}${colors.reset}`);
-        }
+        console.log(`${colors.yellow}╔════════════════════════════════════╗${colors.reset}`);
+        console.log(`${colors.yellow}║     EN ATTENTE DE CONNEXION        ║${colors.reset}`);
+        console.log(`${colors.yellow}╚════════════════════════════════════╝${colors.reset}`);
+        console.log(`${colors.cyan}📱 Pour connecter votre numéro :${colors.reset}`);
+        console.log(`${colors.cyan}   1. Allez sur le site web: http://localhost:${PORT}${colors.reset}`);
+        console.log(`${colors.cyan}   2. Entrez votre numéro${colors.reset}`);
+        console.log(`${colors.cyan}   3. Utilisez le code généré${colors.reset}`);
+        console.log(`${colors.cyan}   (Le QR code est ignoré sur Render)${colors.reset}`);
+        
+        // ✅ PLUS DE requestPairingCode AUTOMATIQUE !
+        // On attend que l'utilisateur utilise l'API
       }
       
       if (connection === "close") {
         const reason = new Error(lastDisconnect?.error)?.output?.statusCode;
         if (reason === DisconnectReason.loggedOut) {
-          console.log(`${colors.red}❌ Déconnecté, suppression des données...${colors.reset}`);
-          exec("rm -rf auth_info_baileys", () => {
-            console.log(`${colors.yellow}🔄 Redémarrage...${colors.reset}`);
-            setTimeout(() => process.exit(0), 3000);
-          });
+          console.log(`${colors.red}❌ Déconnecté, redémarrage...${colors.reset}`);
+          setTimeout(() => process.exit(0), 3000);
         } else {
           console.log(`${colors.yellow}🔄 Reconnexion dans 5 secondes...${colors.reset}`);
           setTimeout(() => process.exit(0), 5000);
         }
       } else if (connection === "open") {
-        console.log(`${colors.green}✅ Connecté à WhatsApp!${colors.reset}`);
-        console.log(`${colors.cyan}🔓 Mode: ${botPublic ? 'PUBLIC' : 'PRIVÉ'}${colors.reset}`);
-        
-        try {
-          const confirmMessage = `✅ *HEX-GATE CONNECTEE*\n\n🚀 *HEXGATE V1* en ligne!\n📊 Commandes: ${commandHandler.getCommandList().length}\n📱 Sessions: ${sessions.active.length}/${MAX_SESSIONS} actives\n🌐 Site: http://localhost:${PORT}`;
-          await sock.sendMessage(OWNER_NUMBER, { text: confirmMessage });
-          console.log(`${colors.green}✅ Confirmation envoyée au propriétaire${colors.reset}`);
-        } catch (error) {}
-        
+        console.log(`${colors.green}✅ Bot prêt à générer des codes !${colors.reset}`);
+        console.log(`${colors.cyan}🌐 En attente de numéros sur: http://localhost:${PORT}${colors.reset}`);
         botReady = true;
       }
     });
@@ -1618,6 +1594,7 @@ async function startBot() {
 
     console.log(`${colors.green}✅ Bot démarré avec succès sur Render !${colors.reset}`);
     console.log(`${colors.cyan}🌐 Site web: http://localhost:${PORT}${colors.reset}`);
+    console.log(`${colors.yellow}⏳ En attente de numéros depuis le web...${colors.reset}`);
 
   } catch (error) {
     console.log(`${colors.red}❌ Erreur démarrage: ${error.message}${colors.reset}`);
