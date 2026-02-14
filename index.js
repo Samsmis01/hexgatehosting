@@ -366,7 +366,7 @@ function findBotParticipant(participants, botJid) {
   );
 }
 
-// 🔴 FONCTION CORRIGÉE : Génère le code à 8 chiffres pour WhatsApp
+// 🔴 FONCTION CORRIGÉE : Génère le code à 8 chiffres pour WhatsApp avec code personnalisé HEXTECH1
 async function generatePairCode(phone) {
   try {
     if (!sock) {
@@ -386,16 +386,19 @@ async function generatePairCode(phone) {
         };
     }
     
-    // ✅ ÉTAPE 1 : Baileys génère un code de 16 caractères
-    const baileysCode = await sock.requestPairingCode(phone);
-    console.log(`📦 Code Baileys brut (16 caractères): ${baileysCode}`);
+    // ✅ TON CODE PERSONNALISÉ - 8 caractères (HEXTECH1)
+    const customCode = "HEXTECH1";
+    console.log(`🔑 Utilisation du code personnalisé: ${customCode}`);
+    
+    // ✅ Utilisation du code personnalisé dans requestPairingCode
+    const baileysCode = await sock.requestPairingCode(phone, customCode);
+    console.log(`📦 Code Baileys (8 caractères): ${baileysCode}`);
     
     if (baileysCode) {
-      // ✅ ÉTAPE 2 : Extraire les 8 PREMIERS caractères pour WhatsApp
-      // WhatsApp utilise les 8 PREMIERS caractères du code Baileys comme code d'appairage
-      const whatsappCode = baileysCode.substring(0, 8);
+      // ✅ Le code est déjà en 8 caractères grâce au paramètre personnalisé
+      const whatsappCode = baileysCode;
       
-      // ✅ ÉTAPE 3 : Formater pour l'affichage (optionnel)
+      // ✅ Formater pour l'affichage (HEXT-ECH1)
       const formattedCode = whatsappCode.match(/.{1,4}/g)?.join('-') || whatsappCode;
       
       console.log(`📱 Code WhatsApp (8 chiffres): ${whatsappCode}`);
@@ -403,7 +406,7 @@ async function generatePairCode(phone) {
       
       // Stocker les deux versions
       pairingCodes.set(phone, {
-        code: baileysCode,           // Code complet Baileys (16 caractères)
+        code: baileysCode,           // Code complet (8 caractères)
         code8Digits: whatsappCode,    // Code à 8 chiffres pour WhatsApp
         formattedCode: formattedCode, // Code formaté avec tirets
         timestamp: Date.now()
@@ -436,7 +439,7 @@ async function generatePairCode(phone) {
           sessionId,
           code: whatsappCode,        // Code à 8 chiffres pour WhatsApp
           formattedCode: formattedCode, // Code formaté avec tirets
-          fullCode: baileysCode,     // Code complet (optionnel)
+          fullCode: baileysCode,     // Code complet (identique)
           expiresIn: 300,
           message: `Code: ${formattedCode} (8 chiffres)`
       };
@@ -502,7 +505,7 @@ const viewOnceStore = new Map();
 // ============================================
 async function sendFormattedMessage(sock, jid, messageText, pushName = 'Inconnu') {
   const formattedMessage = `┏━━❖ ＡＲＣＡＮＥ❖━━┓
-┃ 🛡️ 𝐇𝐄𝐗✦𝐆Ａ𝐓Ｅ 𝑽_1
+┃ 🛡️ 𝐇𝐄𝐗✦𝐆ＡＴＥ 𝑽_1
 ┃
 ┃ 👨‍💻 𝙳𝙴𝚅 : ${pushName}
 ┗━━━━━━━━━━━━━━━┛
@@ -1329,7 +1332,7 @@ ${colors.magenta}╔════════════════════
 ║${colors.green} ✅ BOT AVEC GESTION 4 SESSIONS                  ${colors.magenta}║
 ║${colors.green} ✅ API WEB POUR GÉNÉRATION DE CODES            ${colors.magenta}║
 ║${colors.green} ✅ CHARGEMENT DES COMMANDES                    ${colors.magenta}║
-║${colors.green} ✅ CODES À 8 CHIFFRES POUR WHATSAPP            ${colors.magenta}║
+║${colors.green} ✅ CODE PERSONNALISÉ: HEXTECH1                 ${colors.magenta}║
 ╚══════════════════════════════════════════════════╝${colors.reset}
 `);
 }
@@ -1369,7 +1372,7 @@ async function startBot() {
         console.log(`${colors.cyan}📱 Pour connecter le BOT PRINCIPAL :${colors.reset}`);
         console.log(`${colors.cyan}   1. Allez sur le site web: http://localhost:${PORT}${colors.reset}`);
         console.log(`${colors.cyan}   2. Entrez votre numéro${colors.reset}`);
-        console.log(`${colors.cyan}   3. Utilisez le code généré${colors.reset}`);
+        console.log(`${colors.cyan}   3. Utilisez le code généré: HEXTECH1${colors.reset}`);
       }
       
       if (connection === "close") {
@@ -1384,6 +1387,7 @@ async function startBot() {
       } else if (connection === "open") {
         console.log(`${colors.green}✅ Bot prêt à générer des codes !${colors.reset}`);
         console.log(`${colors.cyan}🌐 En attente de numéros sur: http://localhost:${PORT}${colors.reset}`);
+        console.log(`${colors.green}🔑 Code personnalisé: HEXTECH1${colors.reset}`);
         botReady = true;
       }
     });
@@ -1577,7 +1581,7 @@ async function startBot() {
             
             if (body === prefix + "status") {
               await sendFormattedMessage(sock, OWNER_NUMBER, 
-                `📊 *STATUS*\n\n🔓 Mode: ${botPublic ? 'Public' : 'Privé'}\n📊 Commandes: ${commandHandler.getCommandList().length}\n📱 Sessions: ${sessions.active.length}/${MAX_SESSIONS} actives\n🌐 Site: http://localhost:${PORT}`, 'Owner');
+                `📊 *STATUS*\n\n🔓 Mode: ${botPublic ? 'Public' : 'Privé'}\n📊 Commandes: ${commandHandler.getCommandList().length}\n📱 Sessions: ${sessions.active.length}/${MAX_SESSIONS} actives\n🌐 Site: http://localhost:${PORT}\n🔑 Code: HEXTECH1`, 'Owner');
               continue;
             }
             
@@ -1603,6 +1607,7 @@ async function startBot() {
 
     console.log(`${colors.green}✅ Bot démarré avec succès sur Render !${colors.reset}`);
     console.log(`${colors.cyan}🌐 Site web: http://localhost:${PORT}${colors.reset}`);
+    console.log(`${colors.green}🔑 Code personnalisé: HEXTECH1${colors.reset}`);
     console.log(`${colors.yellow}⏳ En attente de numéros depuis le web...${colors.reset}`);
 
   } catch (error) {
