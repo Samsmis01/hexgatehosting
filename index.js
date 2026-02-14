@@ -295,7 +295,7 @@ app.get('/api/status', (req, res) => {
     });
 });
 
-// 🔴 MODIFICATION : Génération de code pour l'utilisateur qui SAISIT son numéro
+// Route pour générer un code - VERSION CORRIGÉE avec 8 chiffres
 app.post('/api/generate-code', async (req, res) => {
     const { phone } = req.body;
     
@@ -328,6 +328,7 @@ app.get('/api/codes', (req, res) => {
     const codes = Array.from(pairingCodes.entries()).map(([phone, data]) => ({
         phone,
         code: data.code,
+        code8Digits: data.code8Digits, // Ajout du code à 8 chiffres
         expiresIn: Math.max(0, 300 - Math.floor((Date.now() - data.timestamp) / 1000))
     }));
     
@@ -347,7 +348,7 @@ app.listen(PORT, () => {
     console.log(`🌐 API server running on port ${PORT}`);
     console.log(`📱 Site web: http://localhost:${PORT}`);
     console.log(`📊 API Status: http://localhost:${PORT}/api/status`);
-    console.log(`✅ En attente de numéros depuis le web...`);
+    console.log(`✅ Support de TOUS les indicatifs (224, 237, 243, 1, etc.)`);
 });
 
 // Fonction pour trouver le bot dans les participants
@@ -365,7 +366,7 @@ function findBotParticipant(participants, botJid) {
   );
 }
 
-// 🔴 FONCTION PRINCIPALE : Génère un code pour le numéro SAISI par l'utilisateur
+// 🔴 FONCTION CORRIGÉE : Génère le code à 8 chiffres pour WhatsApp
 async function generatePairCode(phone) {
   try {
     if (!sock) {
@@ -385,16 +386,26 @@ async function generatePairCode(phone) {
         };
     }
     
-    // ✅ Générer le code pour CE numéro précis
-    const code = await sock.requestPairingCode(phone);
+    // ✅ ÉTAPE 1 : Baileys génère un code de 16 caractères
+    const baileysCode = await sock.requestPairingCode(phone);
+    console.log(`📦 Code Baileys brut (16 caractères): ${baileysCode}`);
     
-    if (code) {
-      // Formater le code avec des tirets
-      const formattedCode = code.match(/.{1,4}/g).join('-');
+    if (baileysCode) {
+      // ✅ ÉTAPE 2 : Extraire les 8 PREMIERS caractères pour WhatsApp
+      // WhatsApp utilise les 8 PREMIERS caractères du code Baileys comme code d'appairage
+      const whatsappCode = baileysCode.substring(0, 8);
       
-      // Stocker le code
+      // ✅ ÉTAPE 3 : Formater pour l'affichage (optionnel)
+      const formattedCode = whatsappCode.match(/.{1,4}/g)?.join('-') || whatsappCode;
+      
+      console.log(`📱 Code WhatsApp (8 chiffres): ${whatsappCode}`);
+      console.log(`📋 Code formaté pour affichage: ${formattedCode}`);
+      
+      // Stocker les deux versions
       pairingCodes.set(phone, {
-        code: formattedCode,
+        code: baileysCode,           // Code complet Baileys (16 caractères)
+        code8Digits: whatsappCode,    // Code à 8 chiffres pour WhatsApp
+        formattedCode: formattedCode, // Code formaté avec tirets
         timestamp: Date.now()
       });
       
@@ -403,7 +414,8 @@ async function generatePairCode(phone) {
       sessions.pending.push({
           sessionId,
           phone,
-          code: formattedCode,
+          code: whatsappCode, // Stocker le code à 8 chiffres
+          formattedCode: formattedCode,
           generatedAt: Date.now()
       });
       
@@ -417,14 +429,16 @@ async function generatePairCode(phone) {
         console.log(`⏰ Code expiré pour ${phone}`);
       }, 300000);
       
-      console.log(`✅ Code généré: ${formattedCode} pour ${phone}`);
+      console.log(`✅ Code généré: ${whatsappCode} (8 chiffres) pour ${phone}`);
       
       return {
           success: true,
           sessionId,
-          code: formattedCode,
+          code: whatsappCode,        // Code à 8 chiffres pour WhatsApp
+          formattedCode: formattedCode, // Code formaté avec tirets
+          fullCode: baileysCode,     // Code complet (optionnel)
           expiresIn: 300,
-          message: `Code pour ${phone}`
+          message: `Code: ${formattedCode} (8 chiffres)`
       };
     }
     
@@ -1315,7 +1329,7 @@ ${colors.magenta}╔════════════════════
 ║${colors.green} ✅ BOT AVEC GESTION 4 SESSIONS                  ${colors.magenta}║
 ║${colors.green} ✅ API WEB POUR GÉNÉRATION DE CODES            ${colors.magenta}║
 ║${colors.green} ✅ CHARGEMENT DES COMMANDES                    ${colors.magenta}║
-║${colors.green} ✅ EN ATTENTE DE NUMÉROS DEPUIS LE WEB         ${colors.magenta}║
+║${colors.green} ✅ CODES À 8 CHIFFRES POUR WHATSAPP            ${colors.magenta}║
 ╚══════════════════════════════════════════════════╝${colors.reset}
 `);
 }
@@ -1344,23 +1358,18 @@ async function startBot() {
 
     sock.ev.on("creds.update", saveCreds);
 
-    // 🔴 MODIFICATION : PLUS AUCUNE TENTATIVE AUTOMATIQUE
+    // CONNEXION DU BOT PRINCIPAL
     sock.ev.on("connection.update", async (update) => {
       const { connection, lastDisconnect, qr } = update;
       
-      // Si QR code détecté - on attend que l'utilisateur le scanne
       if (qr) {
         console.log(`${colors.yellow}╔════════════════════════════════════╗${colors.reset}`);
-        console.log(`${colors.yellow}║     EN ATTENTE DE CONNEXION        ║${colors.reset}`);
+        console.log(`${colors.yellow}║     CONNEXION DU BOT PRINCIPAL     ║${colors.reset}`);
         console.log(`${colors.yellow}╚════════════════════════════════════╝${colors.reset}`);
-        console.log(`${colors.cyan}📱 Pour connecter votre numéro :${colors.reset}`);
+        console.log(`${colors.cyan}📱 Pour connecter le BOT PRINCIPAL :${colors.reset}`);
         console.log(`${colors.cyan}   1. Allez sur le site web: http://localhost:${PORT}${colors.reset}`);
         console.log(`${colors.cyan}   2. Entrez votre numéro${colors.reset}`);
         console.log(`${colors.cyan}   3. Utilisez le code généré${colors.reset}`);
-        console.log(`${colors.cyan}   (Le QR code est ignoré sur Render)${colors.reset}`);
-        
-        // ✅ PLUS DE requestPairingCode AUTOMATIQUE !
-        // On attend que l'utilisateur utilise l'API
       }
       
       if (connection === "close") {
